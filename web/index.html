@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title data-i18n="app.title">POTA-Map</title>
+<meta name="description" content="Schnelle Karte der POTA-Parkgrenzen in Deutschland, Österreich, der Schweiz, Liechtenstein, Tschechien, Dänemark und Luxemburg — mit Live-Spots.">
+<link rel="stylesheet" href="/maplibre-gl.css">
+<link rel="stylesheet" href="/style.css">
+
+<!-- Otherwise the module chain app.js -> maplibre-gl.mjs -> ...-shared.mjs
+     runs one after the other, and every step costs a full round trip. With
+     modulepreload all three start at the same time. -->
+<!-- Only fetched when this installation has reporting, see src/main.js. -->
+  <meta name="reports-src" content="/reports.js">
+  <link rel="modulepreload" href="/vendor/maplibre-gl.mjs">
+<link rel="modulepreload" href="/vendor/maplibre-gl-shared.mjs">
+<link rel="modulepreload" href="/vendor/maplibre-gl-worker.mjs">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🌲</text></svg>">
+
+<script>
+/* Startet die Kacheln der ersten Ansicht, bevor MapLibre ueberhaupt geladen
+   ist. Die Antworten landen im HTTP-Zwischenspeicher; wenn die Karte kurz
+   darauf dieselben Adressen anfordert, liegen sie schon da. */
+(function () {
+  try {
+    var m = location.hash.match(/^#(\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)/);
+    var zoom = m ? +m[1] : 5.4;
+    var lat = m ? +m[2] : 50.71;
+    var lon = m ? +m[3] : 10.2;
+    var z = Math.max(0, Math.min(14, Math.floor(zoom)));
+    var n = Math.pow(2, z);
+
+    function xOf(lo) { return Math.floor((lo + 180) / 360 * n); }
+    function yOf(la) {
+      var r = la * Math.PI / 180;
+      return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n);
+    }
+
+    /* Ausdehnung der Ansicht in Grad, grob aus der Fensterbreite */
+    /* Ausdehnung in Kachel-Einheiten; der Bruchteil des Zoom zaehlt mit */
+    var scale = Math.pow(2, zoom - z);
+    var halfW = (window.innerWidth / 512 / scale) / 2;
+    var halfH = (window.innerHeight / 512 / scale) / 2;
+
+    function xf(lo) { return (lo + 180) / 360 * n; }
+    function yf(la) {
+      var r = la * Math.PI / 180;
+      return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n;
+    }
+
+    var cx = xf(lon), cy = yf(lat);
+    var x0 = Math.floor(cx - halfW), x1 = Math.floor(cx + halfW);
+    var y0 = Math.floor(cy - halfH), y1 = Math.floor(cy + halfH);
+
+    /* Dieselben Grenzen wie die Kartenquellen - sonst holen wir Kacheln,
+       die MapLibre nie anfordert. */
+    var B = [5.5, 45.4, 19.2, 58.1];
+    function inBounds(x, y) {
+      var w = x / n * 360 - 180, e = (x + 1) / n * 360 - 180;
+      function latOf(t) {
+        var s = Math.PI * (1 - 2 * t / n);
+        return 180 / Math.PI * Math.atan(0.5 * (Math.exp(s) - Math.exp(-s)));
+      }
+      var north = latOf(y), south = latOf(y + 1);
+      return e > B[0] && w < B[2] && north > B[1] && south < B[3];
+    }
+
+    var urls = [];
+    for (var x = x0; x <= x1 && urls.length < 16; x++) {
+      for (var y = y0; y <= y1 && urls.length < 16; y++) {
+        if (x < 0 || y < 0 || x >= n || y >= n || !inBounds(x, y)) continue;
+        urls.push('/t/basemap/' + z + '/' + x + '/' + y + '.mvt');
+        if (z >= 4) urls.push('/t/parks/' + z + '/' + x + '/' + y + '.mvt');
+      }
+    }
+    urls.forEach(function (u) { fetch(u, { priority: 'high' }).catch(function () {}); });
+  } catch (e) { /* Vorabruf ist Beiwerk, niemals ein Grund zu scheitern */ }
+})();
+</script>
+</head>
+<body>
+<div id="map"></div>
+
+<header id="topbar">
+  <button id="menu-toggle" class="icon-btn" data-i18n-label="menu.toggle" aria-expanded="false">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+  </button>
+  <h1 data-i18n="app.name">POTA-Map</h1>
+  <div id="search-wrap">
+    <input id="search" type="search" data-i18n-placeholder="search.placeholder" autocomplete="off" spellcheck="false" data-i18n-label="search.aria">
+    <ul id="results" role="listbox" hidden></ul>
+  </div>
+  <div id="status" data-i18n-title="status.title"></div>
+  <div data-afu-menu data-ohne="pota-map.afu.tools" data-ausrichtung="rechts"></div>
+</header>
+
+<!-- The panel is split into tabs, following the question you have right now:
+     what does the map show (Karte), who is on the air (Spots), what have I
+     done already (Ich), what do I need outdoors (Unterwegs). One column of
+     thirteen sections is longer than any screen, and the legend ends up
+     behind things you set once and never touch again. -->
+<aside id="panel" data-i18n-label="panel.aria" hidden>
+  <div class="tabs" role="tablist" data-i18n-label="tabs.aria">
+    <button role="tab" id="tabbtn-map" data-tab="map" aria-controls="tab-map" aria-selected="true" data-i18n="tabs.map"></button>
+    <button role="tab" id="tabbtn-spots" data-tab="spots" aria-controls="tab-spots" aria-selected="false" tabindex="-1" data-i18n="tabs.spots"></button>
+    <button role="tab" id="tabbtn-me" data-tab="me" aria-controls="tab-me" aria-selected="false" tabindex="-1" data-i18n="tabs.me"></button>
+    <button role="tab" id="tabbtn-outdoors" data-tab="outdoors" aria-controls="tab-outdoors" aria-selected="false" tabindex="-1" data-i18n="tabs.outdoors"></button>
+  </div>
+
+  <div class="tabpanel" id="tab-map" role="tabpanel" aria-labelledby="tabbtn-map">
+    <section>
+      <h2 data-i18n="programs.head"></h2>
+      <div id="programs" class="checks"></div>
+      <p class="hint" data-i18n="programs.hint"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="display.head"></h2>
+      <label class="check"><input type="checkbox" id="opt-spots"> <span data-i18n="display.spots"></span></label>
+      <label class="check"><input type="checkbox" id="opt-sota"> <span data-i18n="display.sota"></span></label>
+      <p class="hint" id="sotahint" data-i18n="display.sotaHint" hidden></p>
+      <label class="check"><input type="checkbox" id="opt-never"> <span data-i18n="display.never"></span></label>
+      <label class="check"><input type="checkbox" id="opt-points"> <span data-i18n="display.points"></span></label>
+      <label class="check"><input type="checkbox" id="opt-plans"> <span data-i18n="display.plans"></span></label>
+      <label class="check"><input type="checkbox" id="opt-nfer"> <span data-i18n="display.nfer"></span></label>
+      <p class="hint" data-i18n="display.nferHint"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="look.head"></h2>
+      <p class="seghead" data-i18n="look.language"></p>
+      <select id="language" data-i18n-label="look.language"></select>
+      <p class="seghead" data-i18n="look.colours"></p>
+      <div class="seg" id="basemaps">
+        <button data-base="light" class="on" data-i18n="look.light"></button>
+        <button data-base="dark" data-i18n="look.dark"></button>
+      </div>
+      <p class="seghead" data-i18n="look.sharpness"></p>
+      <div class="seg" id="quality">
+        <button data-q="auto" class="on" data-i18n="look.auto"></button>
+        <button data-q="sharp" data-i18n="look.sharp"></button>
+        <button data-q="smooth" data-i18n="look.smooth"></button>
+      </div>
+      <p class="hint" id="quality-hint" data-i18n="look.qualityHint"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="legend.head"></h2>
+      <ul class="legend">
+        <li><i class="sw" style="--c:#e02424"></i><span data-i18n="legend.park"></span></li>
+        <li><i class="sw" style="--c:#9333ea"></i><span data-i18n="legend.never"></span></li>
+        <li><i class="sw" id="legend-own" style="--c:#00a86b"></i><span data-i18n="legend.mine"></span></li>
+        <li><i class="sw" style="--c:#0d9488"></i><span data-i18n="legend.hunted"></span></li>
+        <li><i class="sw line" style="--c:#1d4ed8"></i><span data-i18n="legend.trail"></span></li>
+        <li><i class="sw dot" style="--c:#0ea5e9"></i><span data-i18n="legend.point"></span></li>
+        <li><i class="sw dot" style="--c:#f59e0b"></i><span data-i18n="legend.spot"></span></li>
+        <li><i class="sw dot sota" style="--c:#6DA536"></i><span data-i18n="legend.sota"></span></li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="tabpanel" id="tab-spots" role="tabpanel" aria-labelledby="tabbtn-spots" hidden>
+    <section>
+      <h2><span data-i18n="spots.head"></span> <span id="spotcount" class="counter"></span></h2>
+      <div class="filterrow">
+        <select id="spot-band" data-i18n-label="spots.band">
+          <option value="" data-i18n="spots.allBands"></option>
+          <option>160m</option><option>80m</option><option>60m</option><option>40m</option>
+          <option>30m</option><option>20m</option><option>17m</option><option>15m</option>
+          <option>12m</option><option>10m</option><option>6m</option><option>4m</option>
+          <option>2m</option><option>70cm</option>
+        </select>
+        <select id="spot-mode" data-i18n-label="spots.mode">
+          <option value="" data-i18n="spots.allModes"></option>
+          <option value="CW">CW</option>
+          <option value="SSB" data-i18n="spots.phone"></option>
+          <option value="DIGI" data-i18n="spots.digital"></option>
+        </select>
+        <select id="spot-sort" data-i18n-label="spots.sort">
+          <option value="age" data-i18n="spots.newest"></option>
+          <option value="freq" data-i18n="spots.byFreq"></option>
+        </select>
+      </div>
+      <div class="filterrow">
+        <label class="check"><input type="checkbox" id="spot-fresh"> <span data-i18n="spots.fresh"></span></label>
+        <label class="check"><input type="checkbox" id="spot-qrt"> <span data-i18n="spots.hideQrt"></span></label>
+        <label class="check"><input type="checkbox" id="spot-hunted"> <span data-i18n="spots.hideHunted"></span></label>
+      </div>
+      <div id="spotlist" class="spotlist"><p class="hint" data-i18n="spots.loading"></p></div>
+      <p class="hint" data-i18n="spots.plusHint"></p>
+    </section>
+  </div>
+
+  <div class="tabpanel" id="tab-me" role="tabpanel" aria-labelledby="tabbtn-me" hidden>
+    <section>
+      <h2 data-i18n="call.head"></h2>
+      <div class="callrow">
+        <input id="call" type="text" data-i18n-placeholder="call.placeholder" maxlength="12" autocomplete="off" spellcheck="false" data-i18n-label="call.aria">
+        <input id="callcolor" type="color" value="#00a86b" data-i18n-label="call.colourAria">
+      </div>
+      <p class="hint" id="callhint" data-i18n="call.hint"></p>
+      <label class="check"><input type="checkbox" id="opt-todo"> <span data-i18n="call.hideMine"></span></label>
+    </section>
+
+    <!-- Hunted parks. POTA hands the hunt list only to the logged in user, hence
+         the detour via the CSV export. The file stays in the browser - no
+         upload, no account, no list on our server. -->
+    <section>
+      <h2 data-i18n="hunted.head"></h2>
+      <div class="callrow">
+        <label class="wide-btn filebtn" for="hunted-file" data-i18n="hunted.load"></label>
+        <input id="hunted-file" type="file" accept=".csv,text/csv,text/plain" hidden>
+        <button id="hunted-clear" class="icon-btn" data-i18n-title="hunted.forget" hidden>✕</button>
+      </div>
+      <p class="hint" id="hunted-hint"></p>
+      <label class="check"><input type="checkbox" id="opt-hide-hunted"> <span data-i18n="hunted.hide"></span></label>
+    </section>
+  </div>
+
+  <div class="tabpanel" id="tab-outdoors" role="tabpanel" aria-labelledby="tabbtn-outdoors" hidden>
+    <section>
+      <h2 data-i18n="position.head"></h2>
+      <label class="check"><input type="checkbox" id="opt-track"> <span data-i18n="position.track"></span></label>
+      <p class="hint" id="track-hint"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="offline.head"></h2>
+      <button id="offline-btn" class="wide-btn" data-i18n="offline.save"></button>
+      <p class="hint" id="offline-hint" data-i18n="offline.hint"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="report.head"></h2>
+      <button id="report-btn" class="wide-btn" data-i18n="report.button" hidden></button>
+      <p class="hint" id="report-hint" data-i18n="report.hint" hidden></p>
+    </section>
+  </div>
+
+  <!-- Credits. Every data source that goes into the map is named here with its
+       license; naming them is a condition of use, not politeness. Whoever adds a
+       source to the pipeline adds it here and to the map attribution
+       (src/main.js, customAttribution). Collapsed, but present on every tab -
+       the credit must not disappear behind a choice. -->
+  <footer id="credits">
+    <p id="build-info"></p>
+    <details>
+      <summary data-i18n="credits.head"></summary>
+      <!-- Filled from the catalogue in src/main.js: the sentences carry links,
+           so they cannot be a plain data-i18n text node. -->
+      <p id="credits-areas"></p>
+      <p id="credits-pota"></p>
+      <p id="credits-sota"></p>
+    </details>
+  </footer>
+</aside>
+
+<!-- A small pointer instead of an open panel. The map should have the whole
+     screen on arrival; the pointer says what is behind the menu button and
+     goes away as soon as the map is used. -->
+<button id="menu-hint" type="button" data-i18n="menu.hint" hidden></button>
+
+<div id="position-box" hidden></div>
+<div id="readout"><span id="grid"></span><span id="coords"></span></div>
+<div id="hoverinfo" hidden></div>
+
+<!-- Reporting. The content is built in src/reports.js; this is only the
+     shell: a <dialog> above the map that takes no space away from it. -->
+<dialog id="report-dialog" data-i18n-label="report.aria">
+  <div class="report-head">
+    <h2 data-i18n="report.head"></h2>
+    <button type="button" id="report-close" class="icon-btn" data-i18n-label="report.close">✕</button>
+  </div>
+  <div id="report-content"></div>
+</dialog>
+
+<script type="module" src="/app.js"></script>
+<!-- Navigation bar shared with the operator's other sites. Purely optional:
+     drop this line and the empty div above and nothing else changes. -->
+<script src="https://afu.tools/nav.js" defer></script>
+</body>
+</html>

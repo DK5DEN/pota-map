@@ -1,0 +1,6 @@
+# Activations daily (POTA changes hourly, the areas practically never)
+17 4 * * * bash /pipeline/run_daily.sh >> /data/cache/cron.log 2>&1
+
+# Areas and tiles weekly, Sunday night. That run downloads about 150 MB of
+# GeoJSON from pota-map.info and rebuilds the tiles from it.
+40 2 * * 0 bash /pipeline/run.sh >> /data/cache/cron.log 2>&1

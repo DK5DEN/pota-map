@@ -1,0 +1,17 @@
+{
+  "name": "pota-map",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.5.0",
+    "pmtiles": "4.5.0",
+    "protomaps-themes-base": "4.5.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

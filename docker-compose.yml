@@ -1,0 +1,83 @@
+services:
+  web:
+    build: ./web
+    image: pota-map-web:latest
+    restart: unless-stopped
+    volumes:
+      - ./data:/data:ro
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.pota-map.rule=Host(`${PUBLIC_HOST:?set PUBLIC_HOST, see .env.example}`)"
+      - "traefik.http.routers.pota-map.entrypoints=websecure"
+      - "traefik.http.routers.pota-map.tls.certresolver=le"
+      - "traefik.http.services.pota-map.loadbalancer.server.port=8080"
+    networks:
+      - proxy
+      - default
+
+  # Resolves z/x/y from the PMTiles archives on the server. In the browser
+  # every directory level of the archive costs its own round trip, and the
+  # levels depend on each other - behind a proxy that is 150 ms each.
+  tiles:
+    image: pota-map-pipeline:latest
+    build: ./pipeline
+    restart: unless-stopped
+    volumes:
+      - ./data:/data:ro
+    entrypoint: ["/usr/local/bin/pmtiles", "serve", "/data/tiles",
+                 "--port", "8081", "--cache-size", "512",
+                 "--public-url", "https://${PUBLIC_HOST}/t"]
+    networks:
+      - default
+
+  backend:
+    build: ./backend
+    image: pota-map-backend:latest
+    restart: unless-stopped
+    volumes:
+      - ./data:/data:ro
+    environment:
+      - POTA_DATA=/data
+      - SPOT_TTL=45
+      # Required, see backend/app.py: router rule, tile URLs and the name
+      # this installation gives when calling other people's APIs.
+      - PUBLIC_HOST=${PUBLIC_HOST:?set PUBLIC_HOST, see .env.example}
+      # Optional bridge to an issue tracker, see backend/melden.py. Without
+      # both an endpoint and a token the report panel stays hidden, so the
+      # map runs fine without any of this. The token belongs to this program,
+      # not to a person, and is revocable on the tracker side.
+      - BUG_ENDPOINT=${BUG_ENDPOINT:-}
+      - BUG_TOKEN=${BUG_TOKEN:-}
+      - BUG_ENVIRONMENT=pota-map
+    networks:
+      - default
+      # Only needed for the optional issue tracker above: it runs in another
+      # stack and is reachable over this shared network. Drop both lines if
+      # you do not use the report panel.
+      - mcp-backends
+
+  # Scheduled data runs. There is no cron daemon in these images, so
+  # supercronic runs them as a service of its own.
+  cron:
+    image: pota-map-pipeline:latest
+    build: ./pipeline
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      - ./pipeline:/pipeline:ro
+    environment:
+      - POTA_DATA=/data
+      - TZ=Europe/Berlin
+      - PUBLIC_HOST=${PUBLIC_HOST:?set PUBLIC_HOST, see .env.example}
+    entrypoint: ["/usr/local/bin/supercronic", "/pipeline/crontab"]
+    networks:
+      - default
+
+networks:
+  proxy:
+    external: true
+  mcp-backends:
+    external: true

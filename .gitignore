@@ -1,0 +1,10 @@
+# Map data, tiles and snapshots: 21 GB, all built by the pipeline.
+data/
+
+# Local configuration: report endpoint and token.
+.env
+
+web/node_modules/
+web/dist/
+__pycache__/
+*.pyc
