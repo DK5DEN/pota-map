@@ -155,7 +155,7 @@ const CATALOGUE = {
     "popup.areaTrail": "Fläche und Wegverlauf von pota-map.info",
 
     "poi.head": "Was drumherum steht",
-    "poi.hint": "Aus OpenStreetMap, ab Zoomstufe 13. Nichts davon ist geprüft: eine Bank kann seit Jahren weg sein, ein Parkplatz privat. Ab Werk ist alles aus.",
+    "poi.hint": "Aus OpenStreetMap, ab Zoomstufe 13. Nichts davon ist geprüft: eine Bank kann seit Jahren weg sein, ein Parkplatz privat.",
     "poi.group.access": "Anfahrt: Parkplätze, Haltestellen",
     "poi.group.comfort": "Aufenthalt: Bänke, Hütten, Picknick, Zeltplätze",
     "poi.group.supply": "Versorgung: Toiletten, Trinkwasser, Einkehr",
@@ -408,7 +408,7 @@ const CATALOGUE = {
     "popup.areaTrail": "Area and trail from pota-map.info",
 
     "poi.head": "What is around you",
-    "poi.hint": "From OpenStreetMap, from zoom 13 on. None of it is checked: a bench may have been gone for years, a car park may be private. Everything starts switched off.",
+    "poi.hint": "From OpenStreetMap, from zoom 13 on. None of it is checked: a bench may have been gone for years, a car park may be private.",
     "poi.group.access": "Getting there: parking, stops",
     "poi.group.comfort": "Staying there: benches, huts, picnic sites, campsites",
     "poi.group.supply": "Supplies: toilets, drinking water, food",

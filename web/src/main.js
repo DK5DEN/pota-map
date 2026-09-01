@@ -77,8 +77,9 @@ const state = {
   showPoints: true,
   showSpots: true,
   showSota: false,
-  // Nothing on the first visit: whoever wants benches says so.
-  poiGroups: new Set(),
+  // How you get there and where you can sit are the two questions everybody
+  // has; the rest is on request.
+  poiGroups: new Set(["access", "comfort"]),
   showPlans: false,
   onlyNfer: false,
   hideMine: false,
