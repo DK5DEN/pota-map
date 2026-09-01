@@ -175,13 +175,13 @@
     <section>
       <h2><span data-i18n="spots.head"></span> <span id="spotcount" class="counter"></span></h2>
       <div class="filterrow">
-        <select id="spot-band" data-i18n-label="spots.band">
-          <option value="" data-i18n="spots.allBands"></option>
-          <option>160m</option><option>80m</option><option>60m</option><option>40m</option>
-          <option>30m</option><option>20m</option><option>17m</option><option>15m</option>
-          <option>12m</option><option>10m</option><option>6m</option><option>4m</option>
-          <option>2m</option><option>70cm</option>
-        </select>
+        <!-- Several bands at once, so the list is checkboxes rather than a
+             select. The entries are filled from the band table in main.js -
+             one list of bands, not two that drift apart. -->
+        <details id="spot-band" class="dropdown">
+          <summary id="spot-band-label" data-i18n-label="spots.band"></summary>
+          <div id="spot-band-menu" class="dropdown-menu"></div>
+        </details>
         <select id="spot-mode" data-i18n-label="spots.mode">
           <option value="" data-i18n="spots.allModes"></option>
           <option value="CW">CW</option>

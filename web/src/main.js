@@ -89,7 +89,8 @@ const state = {
   huntedTotal: 0,
   hideHunted: false,
   appliedHunt: [],
-  spotFilter: { band: "", mode: "", fresh: false, hideQrt: false, hideHunted: false, sort: "age" },
+  // `band` holds every band that is ticked; empty means all of them.
+  spotFilter: { band: [], mode: "", fresh: false, hideQrt: false, hideHunted: false, sort: "age" },
   base: "light",
   tab: "map",
   hovered: null,
@@ -171,6 +172,10 @@ function restoreSettings() {
   if (typeof g.hideHunted === "boolean") state.hideHunted = g.hideHunted;
   if (g.spotFilter && typeof g.spotFilter === "object") {
     Object.assign(state.spotFilter, g.spotFilter);
+    // Until several bands could be watched at once this was a single name.
+    if (!Array.isArray(state.spotFilter.band)) {
+      state.spotFilter.band = state.spotFilter.band ? [state.spotFilter.band] : [];
+    }
   }
   // The query string beats stored values - a shared link has to show what it
   // promises.
@@ -950,6 +955,61 @@ function bandOf(khz) {
   return "";
 }
 
+/**
+ * The band chooser: a summary that says what is picked, and the bands as
+ * checkboxes underneath.
+ *
+ * A `<select multiple>` would be the smaller change, but it renders as a list
+ * box that is either too short to use or takes half the panel, and on a phone
+ * it is barely operable. `<details>` opens and closes by itself, keeps keyboard
+ * control, and needs no library.
+ */
+function buildBandMenu() {
+  const menu = el("spot-band-menu");
+  if (!menu || menu.childElementCount) return;
+  for (const [name] of BANDS) {
+    const row = document.createElement("label");
+    row.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = name;
+    box.checked = state.spotFilter.band.includes(name);
+    box.addEventListener("change", () => {
+      const picked = new Set(state.spotFilter.band);
+      if (box.checked) picked.add(name);
+      else picked.delete(name);
+      // In the order of the band table, not the order they were clicked.
+      state.spotFilter.band = BANDS.map(([b]) => b).filter((b) => picked.has(b));
+      showBandChoice();
+      saveSettings();
+      renderSpots();
+    });
+    row.appendChild(box);
+    row.appendChild(Object.assign(document.createElement("span"), { textContent: name }));
+    menu.appendChild(row);
+  }
+}
+
+/** What the closed chooser says. */
+function showBandChoice() {
+  const label = el("spot-band-label");
+  if (!label) return;
+  const picked = state.spotFilter.band;
+  label.textContent = picked.length === 0
+    ? t("spots.allBands")
+    : picked.length <= 3 ? picked.join(", ")
+    : t("spots.bandCount", { count: picked.length });
+  for (const box of el("spot-band-menu").querySelectorAll("input")) {
+    box.checked = picked.includes(box.value);
+  }
+}
+
+/* Clicking anywhere else closes the chooser - the same thing a select does. */
+document.addEventListener("click", (e) => {
+  const chooser = el("spot-band");
+  if (chooser && chooser.open && !chooser.contains(e.target)) chooser.open = false;
+});
+
 /** CW, phone and digital - anything finer would be a filter nobody uses. */
 function modeOf(mode) {
   const m = String(mode || "").toUpperCase();
@@ -973,7 +1033,7 @@ function spotAgeMin(s) {
 function filteredSpots() {
   const f = state.spotFilter;
   let list = (spotsRaw || []).filter((s) => {
-    if (f.band && bandOf(s.frequency) !== f.band) return false;
+    if (f.band.length && !f.band.includes(bandOf(s.frequency))) return false;
     if (f.mode && modeOf(s.mode) !== f.mode) return false;
     if (f.hideQrt && isQrt(s)) return false;
     if (f.fresh && spotAgeMin(s) > 15) return false;
@@ -1937,8 +1997,9 @@ function syncControls() {
     if (e) e.checked = enable;
   }
   el("sotahint").hidden = !state.showSota;
-  for (const [id, value] of [["spot-band", state.spotFilter.band],
-                            ["spot-mode", state.spotFilter.mode],
+  buildBandMenu();
+  showBandChoice();
+  for (const [id, value] of [["spot-mode", state.spotFilter.mode],
                             ["spot-sort", state.spotFilter.sort]]) {
     const e = el(id);
     if (e) e.value = value;
@@ -2074,9 +2135,9 @@ el("hunted-file").addEventListener("change", (e) => {
 
 el("hunted-clear").addEventListener("click", forgetHunted);
 
-for (const id of ["spot-band", "spot-mode", "spot-sort"]) {
+for (const id of ["spot-mode", "spot-sort"]) {
   el(id).addEventListener("change", (e) => {
-    const key = id === "spot-band" ? "band" : id === "spot-mode" ? "mode" : "sort";
+    const key = id === "spot-mode" ? "mode" : "sort";
     state.spotFilter[key] = e.target.value;
     saveSettings();
     renderSpots();
