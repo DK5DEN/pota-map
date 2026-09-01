@@ -59,6 +59,21 @@ def fetch_country(prefix: str):
     return load(target)["features"]
 
 
+def flatten(g):
+    """Take a GeometryCollection apart, one level at a time.
+
+    A single reference may arrive as a collection that holds area and line
+    parts together instead of as separate objects. Without this the whole
+    reference falls through the type check below and silently loses its
+    geometry.
+    """
+    if g.geom_type == "GeometryCollection":
+        for part in g.geoms:
+            yield from flatten(part)
+    else:
+        yield g
+
+
 def group_by_reference(features):
     """Merge the objects of one reference into a single geometry."""
     areas, lines = defaultdict(list), defaultdict(list)
@@ -68,18 +83,19 @@ def group_by_reference(features):
         if not geom or not ref:
             continue
         try:
-            g = shape(geom)
+            collection = shape(geom)
         except Exception:
             continue
-        if g.is_empty:
-            continue
-        if g.geom_type in ("Polygon", "MultiPolygon"):
-            if not g.is_valid:
-                g = g.buffer(0)
-            if not g.is_empty:
-                areas[ref].append(g)
-        elif g.geom_type in ("LineString", "MultiLineString"):
-            lines[ref].append(g)
+        for g in flatten(collection):
+            if g.is_empty:
+                continue
+            if g.geom_type in ("Polygon", "MultiPolygon"):
+                if not g.is_valid:
+                    g = g.buffer(0)
+                if not g.is_empty:
+                    areas[ref].append(g)
+            elif g.geom_type in ("LineString", "MultiLineString"):
+                lines[ref].append(g)
     return areas, lines
 
 
