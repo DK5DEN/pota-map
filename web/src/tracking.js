@@ -97,11 +97,16 @@ export function startTracking({ map, maplibregl, parksAtPoint, el, esc, t }) {
   }
 
   async function onPosition(pos) {
+    if (!running) return;
     const { latitude: lat, longitude: lon, accuracy } = pos.coords;
     setMarker(lat, lon);
     if (following) map.easeTo({ center: [lon, lat], duration: 600 });
 
     const inside = await parksAtPoint(lat, lon);
+    // Looking up the parks takes a moment, and in that moment the switch may
+    // have been flipped off. Writing the readout now would put it back on
+    // screen with nothing to switch it off again.
+    if (!running) return;
     const now = new Set(inside.map((p) => p.ref));
 
     for (const p of inside) {
@@ -169,6 +174,10 @@ export function startTracking({ map, maplibregl, parksAtPoint, el, esc, t }) {
     if (marker) marker.remove();
     previous = new Set();
     setHint(t("track.off"));
+    // The readout belongs to the tracking. Leaving it up means a position from
+    // minutes ago keeps standing there, and nothing takes it away.
+    box.hidden = true;
+    box.innerHTML = "";
   }
 
   toggle.addEventListener("change", () => {
