@@ -19,6 +19,21 @@ const COLOR_HUNT = "#0d9488";
 
 const TABS = ["map", "spots", "me", "outdoors"];
 
+/* What is out there, from OpenStreetMap. The switch is per group, and so is
+   the colour: a park has one bench and twenty kinds of thing around it, and
+   twenty colours would be a code to look up, not a legend to read. Which kind
+   it is stands in the popup. */
+const POI_GROUPS = ["access", "comfort", "supply", "view", "orientation", "target", "qrm"];
+const POI_COLORS = {
+  access: "#0369a1",
+  comfort: "#15803d",
+  supply: "#b45309",
+  view: "#7c3aed",
+  orientation: "#0f766e",
+  target: "#be123c",
+  qrm: "#dc2626",
+};
+
 /* Point value of a summit -> colour, the way SOTA usually shows it */
 const SOTA_COLORS = ["step", ["coalesce", ["get", "pts"], 1],
   "#6DA536", 2, "#4D7A20", 4, "#AEA727", 6, "#EFA818", 8, "#DC5D04", 10, "#C8101E"];
@@ -28,6 +43,7 @@ const SOTA_COLORS = ["step", ["coalesce", ["get", "pts"], 1],
 // proxy each of them costs about 150 ms.
 const BASEMAP_TILES = "/t/basemap/{z}/{x}/{y}.mvt";
 const PARKS_TILES = "/t/parks/{z}/{x}/{y}.mvt";
+const POIS_TILES = "/t/pois/{z}/{x}/{y}.mvt";
 const BOUNDS = [5.5, 45.4, 19.2, 58.1];
 
 const params = new URLSearchParams(location.search);
@@ -44,6 +60,8 @@ const state = {
   showPoints: true,
   showSpots: true,
   showSota: false,
+  // Nothing on the first visit: whoever wants benches says so.
+  poiGroups: new Set(),
   showPlans: false,
   onlyNfer: false,
   hideMine: false,
@@ -93,6 +111,7 @@ function saveSettings() {
       tab: state.tab,
       spots: state.showSpots,
       sota: state.showSota,
+      pois: [...state.poiGroups],
       never: state.showNever,
       points: state.showPoints,
       plans: state.showPlans,
@@ -123,6 +142,9 @@ function restoreSettings() {
   if (g.tab && TABS.includes(g.tab)) state.tab = g.tab;
   if (typeof g.spots === "boolean") state.showSpots = g.spots;
   if (typeof g.sota === "boolean") state.showSota = g.sota;
+  if (Array.isArray(g.pois)) {
+    state.poiGroups = new Set(g.pois.filter((x) => POI_GROUPS.includes(x)));
+  }
   if (typeof g.never === "boolean") state.showNever = g.never;
   if (typeof g.points === "boolean") state.showPoints = g.points;
   if (typeof g.plans === "boolean") state.showPlans = g.plans;
@@ -164,6 +186,18 @@ function baseSources() {
       // Reference as the feature id: allows feature-state instead of long
       // list comparisons in the paint expression (saves work every frame).
       promoteId: { parks: "ref", points: "ref", sota: "ref", trails: "ref" },
+    },
+    // Own archive, not another layer of `parks`: the POIs are rebuilt on a
+    // different schedule, and the offline store should only grow for someone
+    // who switched them on.
+    pois: {
+      type: "vector",
+      tiles: [POIS_TILES],
+      minzoom: 13,
+      maxzoom: 14,
+      bounds: BOUNDS,
+      attribution:
+        '<a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     },
     spots: { type: "geojson", data: emptyFC() },
     plans: { type: "geojson", data: emptyFC() },
@@ -281,6 +315,22 @@ function smallPointFilter() {
   return ["step", ["zoom"], branch(4), 5, branch(5), 6, branch(6), 7, branch(7), 8, false];
 }
 
+/** Only the groups that are ticked. An empty set hides the layers entirely. */
+function poiFilter() {
+  return ["in", ["get", "group"], ["literal", [...state.poiGroups]]];
+}
+
+function poiVisibility() {
+  return state.poiGroups.size ? "visible" : "none";
+}
+
+function poiColorExpression() {
+  const m = ["match", ["get", "group"]];
+  for (const group of POI_GROUPS) m.push(group, POI_COLORS[group]);
+  m.push("#64748b");
+  return m;
+}
+
 function parkLayers() {
   const color = fillColorExpression();
   return [
@@ -389,6 +439,64 @@ function parkLayers() {
         ],
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 0.8,
+      },
+    },
+    {
+      // Power lines and electrified railways. Not a destination - a warning,
+      // and dashed, because a solid red line reads as a boundary.
+      id: "qrm-line",
+      type: "line",
+      source: "pois",
+      "source-layer": "qrm",
+      minzoom: 13,
+      filter: poiFilter(),
+      layout: { visibility: poiVisibility() },
+      paint: {
+        "line-color": POI_COLORS.qrm,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 1, 14, 2, 17, 3],
+        "line-opacity": 0.5,
+        "line-dasharray": [2, 2],
+      },
+    },
+    {
+      id: "poi-dot",
+      type: "circle",
+      source: "pois",
+      "source-layer": "pois",
+      // Below 13 a bench is a pixel on top of another pixel - which is also
+      // where the archive starts.
+      minzoom: 13,
+      filter: poiFilter(),
+      layout: { visibility: poiVisibility() },
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 15, 4, 18, 7],
+        "circle-color": poiColorExpression(),
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2],
+        "circle-opacity": 0.95,
+      },
+    },
+    {
+      // Names only from 16 on. Before that they cover the very dots they
+      // belong to, and the popup answers the question anyway.
+      id: "poi-label",
+      type: "symbol",
+      source: "pois",
+      "source-layer": "pois",
+      minzoom: 16,
+      filter: poiFilter(),
+      layout: {
+        visibility: poiVisibility(),
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 10,
+        "text-offset": [0, 0.8],
+        "text-anchor": "top",
+      },
+      paint: {
+        "text-color": "#334155",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.4,
       },
     },
     {
@@ -502,6 +610,17 @@ function parkLayers() {
   ];
 }
 
+/** Show the ticked POI groups, hide the layers when nothing is ticked. */
+function refreshPois() {
+  for (const id of ["qrm-line", "poi-dot", "poi-label"]) {
+    if (!map.getLayer(id)) continue;
+    map.setLayoutProperty(id, "visibility", poiVisibility());
+    map.setFilter(id, poiFilter());
+  }
+  const legend = el("legend-pois");
+  if (legend) legend.hidden = !state.poiGroups.size;
+}
+
 /** Match the interface to the chosen basemap. */
 function applyTheme() {
   document.documentElement.dataset.theme = state.base === "light" ? "light" : "dark";
@@ -597,6 +716,7 @@ function refreshParkPaint() {
   for (const id of ["trails-casing", "trails-line"]) {
     if (map.getLayer(id)) map.setFilter(id, programFilter());
   }
+  refreshPois();
   if (map.getLayer("trails-line")) {
     map.setPaintProperty("trails-line", "line-color", [
       "case",
@@ -1183,6 +1303,21 @@ function featuresAt(point) {
   return out;
 }
 
+/**
+ * POI under the pointer. Deliberately not part of `featuresAt()`: a bench is
+ * not a park hit and must not push a reference out of the popup.
+ */
+function poiAt(point) {
+  if (!state.poiGroups.size) return null;
+  const layers = ["poi-dot", "qrm-line"].filter((id) => map.getLayer(id));
+  if (!layers.length) return null;
+  const box = [
+    [point.x - 5, point.y - 5],
+    [point.x + 5, point.y + 5],
+  ];
+  return map.queryRenderedFeatures(box, { layers })[0] || null;
+}
+
 function spotAt(point) {
   if (!map.getLayer("spots-dot") || !state.showSpots) return null;
   return map.queryRenderedFeatures(point, { layers: ["spots-dot"] })[0] || null;
@@ -1276,8 +1411,9 @@ function setHover(ref) {
 map.on("click", (e) => {
   const spot = spotAt(e.point);
   const summit = summitAt(e.point);
+  const poi = poiAt(e.point);
   const hits = featuresAt(e.point);
-  if (!hits.length && !spot && !summit) {
+  if (!hits.length && !spot && !summit && !poi) {
     popup.remove();
     return;
   }
@@ -1303,6 +1439,18 @@ map.on("click", (e) => {
         esc(t("popup.summit", { alt: p.alt, points: p.pts, activations: p.acts })) +
         '</p><nav><a href="https://sotl.as/summits/' +
         encodeURIComponent(p.ref) + '" target="_blank" rel="noopener">' + t("popup.openSotlas") + "</a></nav></div>",
+    );
+  }
+  if (poi) {
+    const p = poi.properties;
+    const kind = t("poi.kind." + p.kind);
+    parts.push(
+      '<div class="pop"><h3>' + esc(p.name || kind) + "</h3>" +
+        '<p class="meta">' + esc(p.name ? kind : t("poi.group." + p.group)) +
+        " - " + t("poi.source") + "</p>" +
+        '<nav><a href="https://www.google.com/maps/dir/?api=1&destination=' +
+        e.lngLat.lat.toFixed(6) + "," + e.lngLat.lng.toFixed(6) +
+        '" target="_blank" rel="noopener">' + t("popup.route") + "</a></nav></div>",
     );
   }
   for (const p of hits.slice(0, 4)) {
@@ -1694,6 +1842,9 @@ function applyLanguage() {
     sota: link("https://www.sota.org.uk", "Summits on the Air"),
     protomaps: link("https://protomaps.com", "Protomaps"),
   });
+  el("credits-pois").innerHTML = t("credits.pois", {
+    osm: link("https://www.openstreetmap.org/copyright", t("credits.osm")),
+  });
   renderPrograms();
   showHuntedState();
   if (!state.call) el("callhint").textContent = t("call.hint");
@@ -1745,6 +1896,7 @@ function syncControls() {
     ["spot-fresh", state.spotFilter.fresh],
     ["spot-qrt", state.spotFilter.hideQrt],
     ["spot-hunted", state.spotFilter.hideHunted],
+    ...POI_GROUPS.map((group) => ["opt-poi-" + group, state.poiGroups.has(group)]),
   ];
   for (const [id, enable] of pairs) {
     const e = el(id);
@@ -1811,6 +1963,17 @@ if (firstVisit) {
   const dismiss = () => { el("menu-hint").hidden = true; };
   map.once("movestart", dismiss);
   map.once("click", dismiss);
+}
+
+for (const group of POI_GROUPS) {
+  const box = el("opt-poi-" + group);
+  if (!box) continue;
+  box.addEventListener("change", (e) => {
+    if (e.target.checked) state.poiGroups.add(group);
+    else state.poiGroups.delete(group);
+    refreshPois();
+    saveSettings();
+  });
 }
 
 el("opt-spots").addEventListener("change", (e) => {
@@ -2191,6 +2354,9 @@ function offlineUrls() {
         if (!tileInBounds(z, x, y)) continue;
         urls.push(`/t/basemap/${z}/${x}/${y}.mvt`);
         if (z >= 4) urls.push(`/t/parks/${z}/${x}/${y}.mvt`);
+        // Only for whoever switched them on - otherwise the store grows for
+        // people who never see a bench.
+        if (z >= 13 && state.poiGroups.size) urls.push(`/t/pois/${z}/${x}/${y}.mvt`);
       }
     }
   }

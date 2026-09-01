@@ -1,0 +1,39 @@
+# Tag filter for osmium tags-filter: everything that could matter to someone
+# operating portable. Deliberately a little wider than the categories in
+# fetch_osm_pois.py - osmium can only say OR, so combinations like
+# "man_made=tower AND tower:type=observation" have to be sorted out later.
+#
+# Prefix: n = node, w = way, r = relation, nwr = all three.
+
+# getting there
+nwr/amenity=parking
+n/highway=bus_stop
+nwr/railway=station,halt,tram_stop
+
+# staying there
+n/amenity=bench
+nwr/amenity=shelter,bbq
+nwr/leisure=picnic_table,firepit
+nwr/tourism=picnic_site,alpine_hut,wilderness_hut,camp_site,caravan_site
+
+# supplies
+nwr/amenity=toilets,drinking_water,restaurant,cafe,pub,biergarten,fast_food
+nwr/man_made=water_tap
+nwr/shop=supermarket,convenience,bakery
+
+# where to put the antenna, where to look
+nwr/tourism=viewpoint,information
+nwr/man_made=tower
+nwr/natural=peak,saddle
+
+# what other programs activate
+nwr/military=bunker
+nwr/historic=bunker,castle,ruins,fort,windmill,watermill
+nwr/building=castle
+nwr/man_made=lighthouse,windmill,watermill
+
+# where the noise comes from
+w/power=line,minor_line
+n/power=tower
+nwr/power=substation
+w/railway=rail

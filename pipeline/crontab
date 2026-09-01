@@ -4,3 +4,7 @@
 # Areas and tiles weekly, Sunday night. That run downloads about 150 MB of
 # GeoJSON from pota-map.info and rebuilds the tiles from it.
 40 2 * * 0 bash /pipeline/run.sh >> /data/cache/cron.log 2>&1
+
+# POIs monthly. About 9 GB of OSM country extracts go through the filter here;
+# a bench does not move often enough to pay that every week.
+20 3 1 * * bash /pipeline/run_pois.sh >> /data/cache/cron.log 2>&1

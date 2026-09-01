@@ -1,7 +1,9 @@
 FROM python:3.12-slim
 
+# osmium-tool filters and converts the OSM country extracts (see
+# fetch_osm_pois.py). Debian ships it, no need to build anything.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl ca-certificates \
+        curl ca-certificates osmium-tool \
     && rm -rf /var/lib/apt/lists/*
 
 # tippecanoe (builds the vector tiles), from the Felt fork

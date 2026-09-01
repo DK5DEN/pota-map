@@ -158,6 +158,16 @@
         <li><i class="sw dot" style="--c:#f59e0b"></i><span data-i18n="legend.spot"></span></li>
         <li><i class="sw dot sota" style="--c:#6DA536"></i><span data-i18n="legend.sota"></span></li>
       </ul>
+      <!-- Only worth the space once someone switched the layer on. -->
+      <ul class="legend" id="legend-pois" hidden>
+        <li><i class="sw dot" style="--c:#0369a1"></i><span data-i18n="poi.group.access"></span></li>
+        <li><i class="sw dot" style="--c:#15803d"></i><span data-i18n="poi.group.comfort"></span></li>
+        <li><i class="sw dot" style="--c:#b45309"></i><span data-i18n="poi.group.supply"></span></li>
+        <li><i class="sw dot" style="--c:#7c3aed"></i><span data-i18n="poi.group.view"></span></li>
+        <li><i class="sw dot" style="--c:#0f766e"></i><span data-i18n="poi.group.orientation"></span></li>
+        <li><i class="sw dot" style="--c:#be123c"></i><span data-i18n="poi.group.target"></span></li>
+        <li><i class="sw line" style="--c:#dc2626"></i><span data-i18n="poi.group.qrm"></span></li>
+      </ul>
     </section>
   </div>
 
@@ -227,6 +237,18 @@
     </section>
 
     <section>
+      <h2 data-i18n="poi.head"></h2>
+      <label class="check"><input type="checkbox" id="opt-poi-access"> <span data-i18n="poi.group.access"></span></label>
+      <label class="check"><input type="checkbox" id="opt-poi-comfort"> <span data-i18n="poi.group.comfort"></span></label>
+      <label class="check"><input type="checkbox" id="opt-poi-supply"> <span data-i18n="poi.group.supply"></span></label>
+      <label class="check"><input type="checkbox" id="opt-poi-view"> <span data-i18n="poi.group.view"></span></label>
+      <label class="check"><input type="checkbox" id="opt-poi-orientation"> <span data-i18n="poi.group.orientation"></span></label>
+      <label class="check"><input type="checkbox" id="opt-poi-target"> <span data-i18n="poi.group.target"></span></label>
+      <label class="check"><input type="checkbox" id="opt-poi-qrm"> <span data-i18n="poi.group.qrm"></span></label>
+      <p class="hint" data-i18n="poi.hint"></p>
+    </section>
+
+    <section>
       <h2 data-i18n="offline.head"></h2>
       <button id="offline-btn" class="wide-btn" data-i18n="offline.save"></button>
       <p class="hint" id="offline-hint" data-i18n="offline.hint"></p>
@@ -253,6 +275,7 @@
       <p id="credits-areas"></p>
       <p id="credits-pota"></p>
       <p id="credits-sota"></p>
+      <p id="credits-pois"></p>
     </details>
   </footer>
 </aside>

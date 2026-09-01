@@ -32,10 +32,12 @@ are English.
 | `backend` | FastAPI: caches live spots, serves activations per callsign           |
 | `cron`    | supercronic: daily and weekly data runs                              |
 
-The map itself is MapLibre GL on two PMTiles archives:
+The map itself is MapLibre GL on three PMTiles archives:
 
 * `data/basemap/basemap.pmtiles` - Protomaps basemap, regional extract, 6 GB
 * `data/parks.pmtiles` - park areas, park points, trails, SOTA summits, ~60 MB
+* `data/pois.pmtiles` - what is out there: parking, benches, shelters,
+  guideposts, activation targets, and the power lines you do not set up under
 
 ## Where the data comes from
 
@@ -45,6 +47,7 @@ The map itself is MapLibre GL on two PMTiles archives:
 | References, names, spots, activations | `api.pota.app` | undocumented, no published terms |
 | SOTA summits | `api-db2.sota.org.uk` | open to the amateur radio community |
 | Basemap | [Protomaps](https://protomaps.com) builds from OpenStreetMap | ODbL |
+| POIs out there | country extracts from [geofabrik](https://download.geofabrik.de), falling back to [openstreetmap.fr](https://download.openstreetmap.fr/extracts) | ODbL |
 
 **Naming the sources is a condition of use, not politeness.** The credits live
 in three places and have to stay in sync: the footer in `web/index.html`,
@@ -77,6 +80,41 @@ docker compose run --rm cron python /pipeline/fetch_potamap.py
 
 The schedule is in `pipeline/crontab`: activations daily, areas and tiles
 weekly.
+
+### The POI run
+
+Its own run, monthly, because it pulls about 9 GB of country extracts:
+
+```bash
+docker compose run --rm cron bash /pipeline/run_pois.sh
+```
+
+`fetch_osm_pois.py` downloads one country at a time, runs it through
+`osmium tags-filter` with `pipeline/osm_filter.txt`, and deletes the raw
+extract right away - only the filtered file per country stays in
+`cache/osm/`. Areas (a car park, a castle) are reduced to one point; power
+lines and electrified railways stay lines and go into a layer of their own.
+`build_poi_tiles.sh` turns both into `pois.pmtiles`.
+
+After a rebuild the tile service can still answer from the archive it had
+open - it caches the directories of the file it is serving. A restart drops
+that, and the nginx tile cache in front of it holds tiles for a day:
+
+```bash
+docker compose restart tiles
+docker compose up -d --force-recreate web   # only if you want the cache gone now
+```
+
+Arguments limit what is downloaded again - for a test, or when one country was
+unreachable last time. The others still come out of their cached extracts, so
+the output stays complete:
+
+```bash
+docker compose run --rm cron python /pipeline/fetch_osm_pois.py LU
+```
+
+The categories are in `classify()` in `pipeline/fetch_osm_pois.py`; the tag
+filter has to be wider than the categories, because osmium can only say OR.
 
 ### Refreshing the basemap
 
