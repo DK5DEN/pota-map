@@ -294,7 +294,16 @@ html, body {
   cursor: pointer;
   font-size: 13px;
 }
-.check input, .checks input { accent-color: var(--accent); width: 15px; height: 15px; }
+/* flex: none is not decoration: without it a label that wraps to two lines
+   makes the row overflow, and the browser shrinks every shrinkable item in it
+   - including the box, which then sits there a size smaller than its
+   neighbours. */
+.check input, .checks input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
 
 .callrow { display: flex; gap: 6px; }
 .callrow input[type="text"] {
