@@ -1064,9 +1064,16 @@ function pointInArea(lat, lon, geometry) {
     }
     return inside;
   };
-  const polys = geometry.type === "MultiPolygon"
-    ? geometry.coordinates
-    : geometry.type === "Polygon" ? [geometry.coordinates] : [];
+  const polys = [];
+  const collect = (g) => {
+    if (!g) return;
+    // A park that is area and trail at once arrives as a collection; only its
+    // area parts can answer "am I standing inside?".
+    if (g.type === "GeometryCollection") g.geometries.forEach(collect);
+    else if (g.type === "MultiPolygon") polys.push(...g.coordinates);
+    else if (g.type === "Polygon") polys.push(g.coordinates);
+  };
+  collect(geometry);
   for (const poly of polys) {
     if (!poly.length || !ringHit(poly[0])) continue;
     // Inside the outer ring, but possibly in a hole
@@ -1091,7 +1098,9 @@ async function parksAtPoint(lat, lon) {
   const toleranceDeg = TRAIL_TOLERANCE_M / 111320;
   const candidates = [];
   for (const [ref, minx, miny, maxx, maxy, kind] of boxes) {
-    const s = kind === 1 ? toleranceDeg : 0;
+    // 0 area, 1 trail, 2 both. Anything with a line needs the tolerance,
+    // you are never exactly on a trail.
+    const s = kind === 0 ? 0 : toleranceDeg;
     if (lon >= minx - s && lon <= maxx + s && lat >= miny - s && lat <= maxy + s) {
       candidates.push({ ref, kind });
     }
@@ -1104,9 +1113,10 @@ async function parksAtPoint(lat, lon) {
     const geom = await parkGeometry(a.ref);
     if (!geom) continue;
     const edge = distanceToEdge(lat, lon, geom);
-    if (a.kind === 1) {
-      if (edge <= TRAIL_TOLERANCE_M) hits.push({ ref: a.ref, name: names.get(a.ref), edge });
-    } else if (pointInArea(lat, lon, geom)) {
+    const inside = a.kind !== 1 && pointInArea(lat, lon, geom);
+    const alongTrail = a.kind !== 0 &&
+      distanceToEdge(lat, lon, geom, true) <= TRAIL_TOLERANCE_M;
+    if (inside || alongTrail) {
       hits.push({ ref: a.ref, name: names.get(a.ref), edge });
     }
   }
@@ -1297,11 +1307,10 @@ map.on("click", (e) => {
   }
   for (const p of hits.slice(0, 4)) {
     const origin =
-      p.src === "trail"
-        ? t("popup.trail")
-        : p.src
-          ? t("popup.area")
-          : t("popup.pointOnly");
+      p.src === "trail" ? t("popup.trail")
+      : p.src === "both" ? t("popup.areaTrail")
+      : p.src ? t("popup.area")
+      : t("popup.pointOnly");
     // The partners are filled in for the clicked point afterwards, see
     // fillNfer(). Until then the line stays empty instead of wrong.
     const nfer = '<p class="acts nfer" data-ref="' + esc(p.ref) + '"></p>';
@@ -1447,7 +1456,8 @@ function toGpx(ref, name, geometry) {
   const tracks = [];
   const collect = (g) => {
     if (!g) return;
-    if (g.type === "Polygon") tracks.push(...g.coordinates);
+    if (g.type === "GeometryCollection") g.geometries.forEach(collect);
+    else if (g.type === "Polygon") tracks.push(...g.coordinates);
     else if (g.type === "MultiPolygon") for (const p of g.coordinates) tracks.push(...p);
     else if (g.type === "LineString") tracks.push(g.coordinates);
     else if (g.type === "MultiLineString") tracks.push(...g.coordinates);
@@ -1503,7 +1513,7 @@ document.addEventListener("click", (e) => {
  * few hundred metres this is about, the error is far below the accuracy of the
  * position itself. Longitude is compressed by the latitude.
  */
-function distanceToEdge(lat, lon, geometry) {
+function distanceToEdge(lat, lon, geometry, linesOnly = false) {
   const mLat = 111320;
   const mLon = 111320 * Math.cos((lat * Math.PI) / 180);
   const px = lon * mLon;
@@ -1524,10 +1534,15 @@ function distanceToEdge(lat, lon, geometry) {
   const rings = [];
   const collect = (g) => {
     if (!g) return;
-    if (g.type === "Polygon") rings.push(...g.coordinates);
-    else if (g.type === "MultiPolygon") for (const p of g.coordinates) rings.push(...p);
+    if (g.type === "GeometryCollection") g.geometries.forEach(collect);
     else if (g.type === "LineString") rings.push(g.coordinates);
     else if (g.type === "MultiLineString") rings.push(...g.coordinates);
+    // The trail tolerance may only measure against the trail. Against the
+    // boundary as well and every park with both would report a hit from
+    // sixty metres outside its own area.
+    else if (linesOnly) return;
+    else if (g.type === "Polygon") rings.push(...g.coordinates);
+    else if (g.type === "MultiPolygon") for (const p of g.coordinates) rings.push(...p);
   };
   collect(geometry);
 

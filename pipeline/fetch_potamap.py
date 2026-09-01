@@ -20,7 +20,8 @@ import time
 from collections import defaultdict
 
 import requests
-from shapely.geometry import LineString, MultiLineString, mapping, shape
+from shapely.geometry import (GeometryCollection, LineString,
+                              MultiLineString, mapping, shape)
 from shapely.ops import unary_union
 
 from common import CACHE, DATA, PROGRAMS, UA, load, save
@@ -36,6 +37,11 @@ URL = "https://pota-map.info/geojson/{}.geojson"
 # is exactly what pota-map.info publishes.
 
 ATTRIBUTION = "© pota-map.info (DK5UR), MIT license"
+
+# How the position check has to test a reference, written into
+# park_bbox.json: an area is a point-in-polygon test, a trail one
+# with a tolerance, and "both" needs either of them to hit.
+BOX_KIND = {"area": 0, "trail": 1, "both": 2}
 
 
 def fetch_country(prefix: str):
@@ -113,12 +119,21 @@ def main():
 
     areas, lines = group_by_reference(raw)
 
-    # A park can carry both (a trail with a protected area of its own). The
-    # area wins, otherwise the same reference would sit in two tile layers and
-    # the popup would show it twice.
+    # A park can carry both: a trail with a protected area of its own. Both
+    # are kept. The tile layers stay apart (a line is not a fill), while the
+    # per-park file holds everything the reference has, so download, GPX and
+    # the position check see the whole park.
     both = sorted(set(areas) & set(lines))
-    for ref in both:
-        lines.pop(ref, None)
+
+    area_geom = {ref: (parts[0] if len(parts) == 1 else unary_union(parts))
+                 for ref, parts in areas.items()}
+    line_geom = {}
+    for ref, parts in lines.items():
+        pieces = []
+        for g in parts:
+            pieces.extend(g.geoms if g.geom_type == "MultiLineString" else [g])
+        line_geom[ref] = MultiLineString(
+            [LineString(list(t.coords)) for t in pieces])
 
     parks_dir = os.path.join(WEB_DIR, "parks")
     shutil.rmtree(parks_dir, ignore_errors=True)
@@ -127,71 +142,75 @@ def main():
     poly_feats, line_feats = [], []
     unknown = []
     boxes = []
+    kinds = {}
 
-    def store(ref, geom, kind):
-        """Per-park file and tile feature from the same geometry."""
-        park = known.get(ref)
-        if park is None:
-            unknown.append(ref)
-            return None
-        # Bounding box for the question "which park am I standing in?".
-        # In the browser the areas exist only as tiles, so it can only test
-        # what is currently on screen. With this list (about 140 KB) it finds
-        # the candidates anywhere, loads exactly their per-park file and does
-        # the exact test. Five decimals are a bit over one metre.
-        minx, miny, maxx, maxy = geom.bounds
-        boxes.append([ref, round(minx, 5), round(miny, 5),
-                        round(maxx, 5), round(maxy, 5),
-                        1 if kind == "trail" else 0])
-        save(os.path.join(parks_dir, f"{ref}.geojson"), {
-            "type": "Feature", "geometry": mapping(geom),
-            "properties": {
-                "ref": ref, "name": park["name"], "source": "potamap",
-                "kind": kind, "attribution": ATTRIBUTION,
-            },
-        })
+    def tile_feature(ref, geom, src):
         return {
             "type": "Feature",
             "geometry": mapping(geom),
             "properties": {
                 "ref": ref,
-                "name": park["name"],
+                "name": known[ref]["name"],
                 "prog": ref.split("-")[0],
-                "src": kind if kind == "trail" else "potamap",
+                "src": src,
             },
         }
 
-    for ref, parts in sorted(areas.items()):
-        g = parts[0] if len(parts) == 1 else unary_union(parts)
-        feat = store(ref, g, "area")
-        if feat:
-            poly_feats.append(feat)
+    for ref in sorted(set(area_geom) | set(line_geom)):
+        if ref not in known:
+            unknown.append(ref)
+            continue
+        area = area_geom.get(ref)
+        line = line_geom.get(ref)
+        kind = "both" if area is not None and line is not None else \
+               "area" if area is not None else "trail"
+        kinds[ref] = kind
 
-    for ref, parts in sorted(lines.items()):
-        pieces = []
-        for g in parts:
-            pieces.extend(g.geoms if g.geom_type == "MultiLineString" else [g])
-        g = MultiLineString([LineString(list(t.coords)) for t in pieces])
-        feat = store(ref, g, "trail")
-        if feat:
-            line_feats.append(feat)
+        # Everything this reference has, in one geometry - a collection where
+        # it is both. One file per reference is what the frontend expects.
+        whole = (GeometryCollection([area, line]) if kind == "both"
+                 else area if kind == "area" else line)
+
+        # Bounding box for the question "which park am I standing in?".
+        # In the browser the areas exist only as tiles, so it can only test
+        # what is currently on screen. With this list (about 140 KB) it finds
+        # the candidates anywhere, loads exactly their per-park file and does
+        # the exact test. Five decimals are a bit over one metre.
+        minx, miny, maxx, maxy = whole.bounds
+        boxes.append([ref, round(minx, 5), round(miny, 5),
+                      round(maxx, 5), round(maxy, 5),
+                      BOX_KIND[kind]])
+        save(os.path.join(parks_dir, f"{ref}.geojson"), {
+            "type": "Feature", "geometry": mapping(whole),
+            "properties": {
+                "ref": ref, "name": known[ref]["name"], "source": "potamap",
+                "kind": kind, "attribution": ATTRIBUTION,
+            },
+        })
+
+        src = "both" if kind == "both" else kind if kind == "trail" else "potamap"
+        if area is not None:
+            poly_feats.append(tile_feature(ref, area, src))
+        if line is not None:
+            line_feats.append(tile_feature(ref, line, src))
 
     save(os.path.join(DATA, "parks_polygons.geojson"),
          {"type": "FeatureCollection", "features": poly_feats})
     save(os.path.join(DATA, "trails.geojson"),
          {"type": "FeatureCollection", "features": line_feats})
-    save(os.path.join(CACHE, "matched_refs.json"),
-         [f["properties"]["ref"] for f in poly_feats + line_feats])
+    save(os.path.join(CACHE, "matched_refs.json"), sorted(kinds))
     save(os.path.join(WEB_DIR, "park_bbox.json"), sorted(boxes))
+    # The statistics count a reference once, by what it mainly is: a park with
+    # an area is an area, even when a trail runs through it.
     save(os.path.join(CACHE, "sources.json"),
-         {f["properties"]["ref"]: f["properties"]["src"]
-          for f in poly_feats + line_feats})
+         {ref: "trail" if kind == "trail" else "potamap"
+          for ref, kind in sorted(kinds.items())})
 
-    missing = sorted(set(known) - set(areas) - set(lines))
+    missing = sorted(set(known) - set(kinds))
     print(f"{len(poly_feats)} areas, {len(line_feats)} trails")
     print(f"{len(boxes)} bounding boxes -> {WEB_DIR}/park_bbox.json")
     if both:
-        print(f"area and trail at once, trail dropped: {', '.join(both)}")
+        print(f"area and trail at once, both kept: {', '.join(both)}")
     if unknown:
         print(f"not in the POTA list, skipped: {len(unknown)} "
               f"(e.g. {unknown[:5]})")
