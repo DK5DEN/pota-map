@@ -3,6 +3,7 @@ import { Protocol } from "pmtiles";
 import { noLabels, labels as themeLabels } from "protomaps-themes-base";
 import { startTracking } from "./tracking.js";
 import { t, applyStatic, currentLanguage, setLanguage, LANGUAGES } from "./i18n.js";
+import { addPoiIcons } from "./poiicons.js";
 
 /* PMTiles: MapLibre pulls single tiles out of one file over HTTP range requests. */
 maplibregl.addProtocol("pmtiles", new Protocol().tile);
@@ -24,6 +25,22 @@ const TABS = ["map", "spots", "me", "outdoors"];
    twenty colours would be a code to look up, not a legend to read. Which kind
    it is stands in the popup. */
 const POI_GROUPS = ["access", "comfort", "supply", "view", "orientation", "target", "qrm"];
+
+/* Which group a kind belongs to. The tiles carry the group as a property -
+   this table is only here to colour the symbols, which are drawn once and
+   cannot read a filter expression. `classify()` in fetch_osm_pois.py is the
+   authority; if the two ever disagree, only the colour of a symbol is wrong. */
+const POI_KIND_GROUP = {
+  parking: "access", transit: "access",
+  bench: "comfort", shelter: "comfort", hut: "comfort", picnic: "comfort",
+  camp: "comfort",
+  toilets: "supply", water: "supply", food: "supply",
+  viewpoint: "view", tower: "view", peak: "view",
+  guidepost: "orientation", board: "orientation",
+  bunker: "target", castle: "target", lighthouse: "target", mill: "target",
+  powerline: "qrm", railway: "qrm", substation: "qrm", pylon: "qrm",
+};
+
 const POI_COLORS = {
   access: "#0369a1",
   comfort: "#15803d",
@@ -459,13 +476,15 @@ function parkLayers() {
       },
     },
     {
+      // The overview: at 13 and 14 a symbol would be a smudge, and there can
+      // be a few thousand of them on the screen. A dot says "something is
+      // here", the symbol above says what.
       id: "poi-dot",
       type: "circle",
       source: "pois",
       "source-layer": "pois",
-      // Below 13 a bench is a pixel on top of another pixel - which is also
-      // where the archive starts.
       minzoom: 13,
+      maxzoom: 15,
       filter: poiFilter(),
       layout: { visibility: poiVisibility() },
       paint: {
@@ -477,21 +496,34 @@ function parkLayers() {
       },
     },
     {
-      // Names only from 16 on. Before that they cover the very dots they
-      // belong to, and the popup answers the question anyway.
-      id: "poi-label",
+      // From 15 on you should not have to click to know what is there. The
+      // symbols are drawn at runtime, see poiicons.js.
+      id: "poi-symbol",
       type: "symbol",
       source: "pois",
       "source-layer": "pois",
-      minzoom: 16,
+      minzoom: 15,
       filter: poiFilter(),
       layout: {
         visibility: poiVisibility(),
+        "icon-image": [
+          "coalesce",
+          ["image", ["concat", "poi-", ["get", "kind"]]],
+          ["image", "poi-generic"],
+        ],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.75, 17, 1],
+        // Overlapping symbols make a wall of colour. Whoever is hidden here
+        // is still in the tile and still answers a click.
+        "icon-allow-overlap": false,
+        "icon-padding": 1,
         "text-field": ["get", "name"],
         "text-font": ["Noto Sans Regular"],
         "text-size": 10,
-        "text-offset": [0, 0.8],
+        "text-offset": [0, 1.1],
         "text-anchor": "top",
+        // The name is the extra, the symbol is the point: where the label does
+        // not fit, the symbol stays.
+        "text-optional": true,
       },
       paint: {
         "text-color": "#334155",
@@ -612,7 +644,8 @@ function parkLayers() {
 
 /** Show the ticked POI groups, hide the layers when nothing is ticked. */
 function refreshPois() {
-  for (const id of ["qrm-line", "poi-dot", "poi-label"]) {
+  addPoiIcons(map, (kind) => POI_COLORS[POI_KIND_GROUP[kind]] || "#64748b");
+  for (const id of ["qrm-line", "poi-dot", "poi-symbol"]) {
     if (!map.getLayer(id)) continue;
     map.setLayoutProperty(id, "visibility", poiVisibility());
     map.setFilter(id, poiFilter());
@@ -1309,7 +1342,7 @@ function featuresAt(point) {
  */
 function poiAt(point) {
   if (!state.poiGroups.size) return null;
-  const layers = ["poi-dot", "qrm-line"].filter((id) => map.getLayer(id));
+  const layers = ["poi-symbol", "poi-dot", "qrm-line"].filter((id) => map.getLayer(id));
   if (!layers.length) return null;
   const box = [
     [point.x - 5, point.y - 5],
