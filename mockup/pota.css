@@ -1,0 +1,407 @@
+/* POTA-Karte. Mockup for the page /pota on afu.tools. In the real thing this
+   block goes into style.css under its own heading, the same way /ov-karte
+   and /portabel have theirs. Everything else comes from style.css as is. */
+
+:root {
+  --pota-h: clamp(520px, calc(100vh - 62px - 12.5rem), 960px);
+  /* Höhe der Suchpille. Das Zahnrad daneben ist genau so hoch und so breit,
+     und derselbe Wert hält den Abstand zwischen beiden. */
+  --pota-suche-h: 2.9rem;
+  --pota-rand: 0.5rem;
+}
+
+/* ------------------------------------------------------------- Grid */
+
+.pota-app {
+  display: grid; grid-template-columns: 22rem minmax(0, 1fr);
+  gap: 1rem; margin: 0.6rem auto 1.4rem; height: var(--pota-h);
+}
+
+/* ------------------------------------------------------------ Panel */
+
+.pota-panel {
+  display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card-bg);
+}
+.pota-panel-kopf {
+  display: flex; align-items: stretch; gap: 0.4rem;
+  border-bottom: 1px solid var(--border); padding: 0 0.4rem;
+}
+.pota-tabs { display: flex; flex: 1 1 auto; min-width: 0; }
+.pota-tab {
+  flex: 1 1 0; font: inherit; font-size: 0.92rem; cursor: pointer;
+  padding: 0.7rem 0.4rem; border: 0; border-bottom: 2px solid transparent;
+  background: transparent; color: var(--muted); white-space: nowrap;
+}
+.pota-tab:hover { color: var(--fg); }
+.pota-tab[aria-selected="true"] { color: var(--fg); font-weight: 600; border-bottom-color: var(--accent); }
+.pota-zaehler {
+  display: inline-block; min-width: 1.4em; padding: 0 0.35em; margin-left: 0.2em;
+  border-radius: 999px; font-size: 0.72rem; font-weight: 600; line-height: 1.5;
+  background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg);
+}
+h3 .pota-zaehler { font-weight: 500; vertical-align: middle; }
+.pota-schliessen { display: none; }
+
+.pota-panel-inhalt { flex: 1 1 auto; overflow-y: auto; padding: 0.2rem 1rem 0.6rem; min-height: 0; }
+.pota-seite section { padding: 0.9rem 0 0.7rem; border-bottom: 1px solid var(--border); }
+.pota-seite section:last-child { border-bottom: 0; }
+.pota-seite h3 { margin: 0 0 0.5rem; font-size: 0.98rem; }
+.pota-seite .field { margin: 0.3rem 0 0.6rem; }
+.pota-seite .field select { width: 100%; }
+.pota-seite .field-hint { display: block; margin: 0.25rem 0 0.5rem; }
+.pota-seghead {
+  margin: 0.7rem 0 0.3rem; font-size: 0.78rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); font-weight: 600;
+}
+
+.pota-check {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.22rem 0;
+  font-size: 0.92rem; cursor: pointer;
+}
+.pota-check input { accent-color: var(--accent); margin: 0; flex: none; }
+.pota-checks { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0.6rem; }
+
+.pota-seg { gap: 0.35rem; }
+.pota-regler { display: flex; align-items: center; gap: 0.7rem; }
+.pota-regler input[type="range"] { flex: 1 1 auto; accent-color: var(--accent); min-width: 0; }
+.pota-regler output { font-size: 0.85rem; color: var(--muted); min-width: 3.6em; text-align: right; font-variant-numeric: tabular-nums; }
+.pota-breit { display: block; width: 100%; text-align: center; }
+
+.pota-callzeile { display: flex; gap: 0.4rem; align-items: center; }
+.pota-callzeile input[type="text"] {
+  flex: 1 1 auto; min-width: 0; background: var(--bg2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 9px; padding: 0.5rem 0.7rem;
+  font: inherit; font-size: 0.95rem; text-transform: uppercase;
+}
+.pota-callzeile input[type="color"] {
+  width: 2.4rem; height: 2.3rem; padding: 0.15rem; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--bg2); cursor: pointer;
+}
+.pota-datei { cursor: pointer; flex: 1 1 auto; text-align: center; }
+
+/* Legend swatches, same shapes the old map used. */
+.pota-legende { list-style: none; margin: 0.2rem 0 0; padding: 0; font-size: 0.86rem; color: var(--muted); }
+.pota-legende li { display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0; }
+.pota-legende .sw { width: 1.1rem; height: 0.8rem; border-radius: 3px; flex: none; background: color-mix(in srgb, var(--c) 40%, transparent); border: 2px solid var(--c); }
+.pota-legende .sw.line { height: 0; border-width: 0 0 3px; border-radius: 0; background: none; }
+.pota-legende .sw.dot { width: 0.8rem; height: 0.8rem; border-radius: 50%; background: var(--c); border: 2px solid #fff; }
+.pota-legende .sw.sota { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); border: 0; }
+
+/* Spots: filters in rows, then the list. */
+.pota-filterzeile { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; margin: 0.3rem 0 0.5rem; }
+.pota-filterzeile select {
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 9px; padding: 0.35rem 0.5rem; font: inherit; font-size: 0.86rem;
+}
+.pota-dropdown { position: relative; }
+.pota-dropdown summary {
+  list-style: none; cursor: pointer; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 0.35rem 1.6rem 0.35rem 0.5rem; font-size: 0.86rem; position: relative;
+}
+.pota-dropdown summary::after { content: "▾"; position: absolute; right: 0.5rem; top: 0.3rem; color: var(--muted); }
+.pota-dropdown-menu {
+  position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 9rem;
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 0.4rem;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 9px;
+  padding: 0.4rem 0.6rem; box-shadow: var(--shadow);
+}
+.pota-dropdown-menu .pota-check { font-size: 0.85rem; padding: 0.12rem 0; }
+.pota-spotliste { list-style: none; margin: 0.3rem 0 0; padding: 0; }
+.pota-spotliste li {
+  display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.6rem; align-items: center;
+  padding: 0.5rem 0.2rem; border-top: 1px solid var(--border); cursor: pointer;
+}
+.pota-spotliste li:hover { background: var(--card-hover); }
+.pota-spotliste li.qrt { opacity: 0.55; }
+.pota-spotliste .rufz { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pota-spotliste .freq { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86rem; color: var(--accent); }
+.pota-spotliste .park { grid-column: 1; font-size: 0.84rem; color: var(--muted); }
+.pota-spotliste .alter { font-size: 0.8rem; color: var(--muted); text-align: right; }
+.pota-spotliste .plus {
+  grid-row: 1 / span 2; grid-column: 2; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--bg2); color: var(--fg);
+  font: inherit; font-size: 1.05rem; line-height: 1; cursor: pointer;
+}
+.pota-spotliste .plus[aria-pressed="true"] { background: #0d9488; color: #fff; border-color: transparent; }
+.pota-spotliste .alter { grid-column: 1; }
+.pota-spotliste .qrt-mark { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #ef4444; margin-left: 0.4rem; }
+
+.pota-credits { border-top: 1px solid var(--border); padding: 0.45rem 1rem 0.5rem; font-size: 0.8rem; }
+.pota-credits summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
+.pota-credits details p { margin: 0.35rem 0; color: var(--muted); font-size: 0.78rem; }
+
+/* -------------------------------------------------------------- Map */
+
+.pota-map {
+  position: relative; min-height: 0; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg2);
+  z-index: 0;
+}
+.pota-leaflet { position: absolute; inset: 0; background: #e8e6e1; }
+.pota-leaflet .leaflet-tile-pane { filter: saturate(var(--sat, 1)); }
+.pota-map[data-base="pastel"] .leaflet-tile-pane { filter: saturate(calc(var(--sat, 1) * 0.7)) brightness(1.06) contrast(0.92); }
+.pota-map[data-base="dark"] .pota-leaflet { background: #1b1d21; }
+.pota-map[data-base="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.9) saturate(calc(var(--sat, 1) * 0.6)); }
+.pota-leaflet .leaflet-container { font: inherit; }
+.leaflet-control-attribution { font-size: 0.68rem; }
+
+/* Floating pieces over the map. */
+.pota-suche {
+  position: absolute; z-index: 1000; top: 0.6rem; left: 0.6rem;
+  width: min(22rem, calc(100% - 4.4rem)); min-height: var(--pota-suche-h);
+  display: flex; align-items: center; gap: 0.4rem;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 999px;
+  padding: 0.15rem 0.6rem 0.15rem 0.7rem; box-shadow: var(--shadow);
+}
+.pota-suche input {
+  flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--fg);
+  font: inherit; font-size: 0.95rem; padding: 0.45rem 0.2rem; outline: none;
+}
+.pota-suche input::-webkit-search-cancel-button { filter: invert(0.6); }
+.pota-status { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #22c55e; flex: none; }
+.pota-status.laden { background: #f59e0b; }
+.pota-status.offline { background: #ef4444; }
+#treffer {
+  position: absolute; top: calc(100% + 0.35rem); left: 0; right: 0; margin: 0; padding: 0.3rem 0;
+  list-style: none; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); max-height: 18rem; overflow-y: auto;
+}
+#treffer li { padding: 0.45rem 0.9rem; cursor: pointer; font-size: 0.92rem; display: flex; gap: 0.6rem; }
+#treffer li:hover { background: var(--card-hover); }
+#treffer .ref { font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+#treffer .name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Alles, was die Karte bedient, sitzt unten rechts: oben rechts sitzt das
+   Kreuz der Sprechblasen, und ein Knopf daneben wird beim Schließen
+   getroffen statt des Kreuzes. Über der Nennung der Quellen, die dort ihren
+   Platz behält. */
+.pota-knoepfe { position: absolute; z-index: 1000; right: 0.6rem; bottom: 2.2rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.pota-knopf {
+  width: 2.3rem; height: 2.3rem; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--fg); cursor: pointer; display: grid; place-items: center;
+  box-shadow: var(--shadow);
+}
+.pota-knopf:hover { border-color: var(--accent); background: var(--card-hover); }
+.pota-knopf[aria-pressed="true"] { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent); border-color: transparent; }
+.pota-knopf.nur-schmal { display: none; }
+
+.pota-position {
+  position: absolute; z-index: 1000; left: 50%; bottom: 2.4rem; transform: translateX(-50%);
+  max-width: calc(100% - 1.2rem); padding: 0.5rem 0.9rem; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border); box-shadow: var(--shadow);
+  font-size: 0.9rem; line-height: 1.4;
+}
+.pota-position strong { color: var(--accent); }
+.pota-readout {
+  position: absolute; z-index: 1000; left: 0.6rem; bottom: 0.6rem;
+  display: flex; gap: 0.6rem; padding: 0.2rem 0.6rem; border-radius: 8px;
+  background: color-mix(in srgb, var(--bg2) 85%, transparent); border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.74rem; color: var(--muted);
+}
+.pota-readout #locator { color: var(--fg); font-weight: 600; }
+
+/* Näher heran und weiter weg sind unsere eigenen Knöpfe, nicht die von
+   Leaflet: so stehen sie in derselben Spalte wie der Rest und nicht in einer
+   zweiten, die man getrennt verschieben müsste. */
+.pota-knoepfe #knopf-minus { margin-bottom: 0.5rem; }
+
+/* Popup in the colours of the page, with the same buttons. */
+.pota-leaflet .leaflet-popup-content-wrapper { background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.pota-leaflet .leaflet-popup-tip { background: var(--bg2); border: 1px solid var(--border); }
+.pota-leaflet .leaflet-popup-content { margin: 0.8rem 1rem; font-size: 0.88rem; line-height: 1.45; min-width: 17rem; }
+.pota-leaflet .leaflet-popup-close-button { color: var(--muted); }
+.pota-popup h4 { margin: 0 0 0.1rem; font-size: 1rem; }
+.pota-popup h4 .ref { font-variant-numeric: tabular-nums; color: var(--accent); }
+.pota-popup .quelle, .pota-popup .zahlen { color: var(--muted); font-size: 0.8rem; margin: 0 0 0.3rem; }
+.pota-popup .nfer { margin: 0.3rem 0; }
+.pota-popup .nfer a { font-variant-numeric: tabular-nums; }
+.pota-popup .knoepfe { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
+.pota-popup .knoepfe .btn-sm { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+.pota-popup details { margin-top: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.4rem; }
+.pota-popup summary { cursor: pointer; font-weight: 600; font-size: 0.86rem; }
+.pota-popup .plaetze { list-style: none; margin: 0.3rem 0 0; padding: 0; }
+.pota-popup .plaetze li { padding: 0.35rem 0; border-top: 1px solid var(--border); font-size: 0.82rem; color: var(--muted); }
+.pota-popup .plaetze .punkte { display: inline-block; min-width: 2.2em; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.pota-popup .plaetze .btn-sm { padding: 0.15rem 0.5rem; font-size: 0.76rem; margin-top: 0.2rem; }
+.pota-popup .plaetze-hint { font-size: 0.76rem; color: var(--muted); margin: 0.2rem 0 0; }
+
+/* Marker icons drawn by CSS, no image files. */
+.pota-sota span { display: block; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 13px solid var(--c, #6DA536); filter: drop-shadow(0 0 1px #fff); }
+.pota-spot { width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
+.pota-spot.puls::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid #f59e0b; opacity: 0; animation: pota-puls 1.8s ease-out infinite; }
+@keyframes pota-puls { 0% { transform: scale(.5); opacity: .9 } 100% { transform: scale(1.6); opacity: 0 } }
+/* Angekündigt: derselbe Punkt wie beim Live-Spot, nur violett. */
+.pota-spot.geplant { background: #8b5cf6; }
+.pota-punkt { width: 10px; height: 10px; border-radius: 50%; background: #0ea5e9; border: 2px solid #fff; }
+.pota-ich { width: 16px; height: 16px; border-radius: 50%; background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 3px rgba(37,99,235,.35); }
+.pota-poi span { display: block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff; box-sizing: border-box; }
+.pota-leaflet .leaflet-tooltip { background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; box-shadow: var(--shadow); }
+.pota-leaflet .leaflet-tooltip::before { display: none; }
+
+/* --------------------------------------------------------- Fullscreen */
+
+.pota-app:fullscreen { background: var(--bg); padding: 0.6rem; gap: 0.6rem; height: 100%; width: 100%; max-width: none; margin: 0; }
+
+/* -------------------------------------------------------------- Phone */
+
+/* Below 52 rem (the site's own phone breakpoint) the map takes everything under the site header. No page
+   head, no margins, no rounded box: a phone has 390 px and every one of
+   them belongs to the map. The panel becomes a sheet that slides up. */
+@media (max-width: 52rem) {
+  .pota-kopf { display: none; }
+  .pota-app {
+    display: block; width: 100%; margin: 0; height: calc(100dvh - 52px);
+  }
+  .pota-map { height: 100%; border: 0; border-radius: 0; }
+  .pota-knopf.nur-schmal { display: grid; }
+  .pota-schliessen {
+    display: block; flex: none; border: 0; background: transparent; color: var(--muted);
+    font: inherit; font-size: 1.1rem; padding: 0 0.6rem; cursor: pointer;
+  }
+  .pota-panel {
+    position: fixed; z-index: 1100; left: 0; right: 0; bottom: 0; top: auto;
+    max-height: 72dvh; border-radius: 16px 16px 0 0; border-bottom: 0;
+    /* Zugeklappt ganz aus dem Bild, die eigene Höhe plus etwas Luft: sonst
+       bleibt der Schatten als Streifen am unteren Rand stehen. */
+    transform: translateY(calc(100% + 1rem)); transition: transform 0.22s ease-out;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.35);
+  }
+  .pota-panel[data-offen] { transform: none; }
+  .pota-panel-kopf { padding-top: 0.35rem; }
+  .pota-panel-kopf::before {
+    /* the grab handle of the sheet */
+    content: ""; position: absolute; left: 50%; top: 0.3rem; width: 2.4rem; height: 4px;
+    border-radius: 2px; background: var(--border); transform: translateX(-50%);
+  }
+  .pota-tabs { padding-top: 0.5rem; }
+  .pota-tab { font-size: 0.88rem; padding: 0.55rem 0.2rem; }
+  /* solid: the map must not shine through a sheet you read on */
+  .pota-panel { background: var(--bg2); }
+  /* Suche und Zahnrad teilen sich die Zeile: gleicher Abstand zum Rand
+     links wie rechts, dieselbe Lücke dazwischen, dieselbe Höhe. */
+  .pota-suche {
+    top: var(--pota-rand); left: var(--pota-rand); width: auto;
+    right: calc(var(--pota-rand) * 2 + var(--pota-suche-h));
+  }
+  .pota-readout { left: 0.5rem; }
+  /* Über der Nennung der Quellen, die unten rechts ihren Platz behält, und
+     in einer Flucht mit dem Zahnrad darüber: gleicher Abstand zum Rand,
+     gleiche Größe. Auf dem Handy wird getippt, nicht gezielt. */
+  .pota-knoepfe { bottom: 2.4rem; right: var(--pota-rand); }
+  .pota-knopf { width: var(--pota-suche-h); height: var(--pota-suche-h); }
+  .pota-leaflet .leaflet-control-attribution { max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pota-text { padding-top: 1rem; }
+  .pota-text .count-line { margin-top: 0.4rem; }
+}
+
+/* ---------------------------------------------------- Menü auf dem Handy
+
+   Gehört nicht zur Karte, sondern in style.css: im aufgeklappten Kopfmenü
+   standen sowohl die fünf meistgebrauchten Seiten als auch die Einträge der
+   Gruppen als gerahmte Kacheln, zweispaltig. Das las sich wie eine
+   Knopfleiste mitten in einer Liste von Links, und zwei Spalten machten aus
+   „DX-Cluster“ und „Contest“ Nachbarn, die nichts miteinander zu tun haben.
+   Jetzt ist das ganze Menü eine Liste: ein Eintrag je Zeile, Symbol davor. */
+@media (max-width: 52rem) {
+  .topbar.klappbar .schnellzugriff {
+    display: block; padding: 0.3rem 0 0.4rem;
+  }
+  .topbar.klappbar .schnellzugriff p {
+    padding: 0.2rem clamp(1.25rem, 5vw, 2rem) 0.15rem;
+  }
+  .topbar.klappbar .schnellzugriff a,
+  .topbar.klappbar .untermenu-inhalt a {
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.7rem clamp(1.25rem, 5vw, 2rem);
+    background: none; border: 0; border-radius: 0; font-size: 1rem;
+  }
+  .topbar.klappbar .schnellzugriff a:hover,
+  .topbar.klappbar .untermenu-inhalt a:hover { background: var(--card-hover); }
+  /* The group entries sit one under the other and carry the indent in the
+     padding above, so the block itself has none left. */
+  .topbar.klappbar .untermenu-inhalt,
+  .topbar.klappbar .untermenu-inhalt.zweispaltig {
+    display: block; padding: 0 0 0.4rem;
+  }
+  /* The entry of the page you are on keeps its mark, now as a bar on the
+     left edge instead of a filled tile. */
+  .topbar.klappbar .untermenu-inhalt a[aria-current="page"] {
+    background: var(--card-hover); box-shadow: inset 3px 0 0 var(--accent);
+  }
+  /* Symbols in one column: without a fixed width the labels start at a
+     different place in every row, because an emoji is not as wide as the
+     next one. */
+  .topbar.klappbar .schnellzugriff .ico,
+  .topbar.klappbar .untermenu-inhalt .ico {
+    width: 1.5rem; text-align: center; font-size: 1.05rem;
+  }
+}
+
+
+/* ------------------------------------------------------- Kopfleiste, Konto
+
+   Gehört in style.css und builder/navigation.py: Suchen, Melden und das
+   Konto waren drei Knöpfe mit drei Höhen (35, 39 und 30 px), weil jeder sein
+   eigenes Polster mitbrachte. Jetzt gibt die Zeile die Höhe vor und die
+   Knöpfe nur noch die Breite. */
+.bar-actions > button {
+  height: 2.4rem; padding-block: 0; display: inline-flex; align-items: center;
+}
+.konto-open {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card-bg); color: inherit;
+  padding: 0 0.8rem; font: inherit; font-size: 0.9rem; cursor: pointer;
+}
+.konto-open:hover { border-color: var(--accent); }
+.konto-open[data-an] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.konto-open[data-an] #konto-text { font-weight: 600; font-variant-numeric: tabular-nums; }
+.konto-menu {
+  position: absolute; z-index: 20; right: clamp(1.25rem, 5vw, 2rem); top: calc(100% - 0.3rem);
+  min-width: 13rem; padding: 0.4rem 0;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.konto-kopf { margin: 0; padding: 0.5rem 0.9rem 0.6rem; border-bottom: 1px solid var(--border); line-height: 1.3; }
+.konto-kopf strong { display: block; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.konto-menu a, .konto-menu button {
+  display: block; width: 100%; text-align: left; padding: 0.5rem 0.9rem;
+  font: inherit; font-size: 0.92rem; color: var(--fg); text-decoration: none;
+  background: none; border: 0; cursor: pointer;
+}
+.konto-menu a:hover, .konto-menu button:hover { background: var(--card-hover); }
+
+/* Rufzeichen aus dem Konto: es wird angezeigt, nicht getippt. Geändert wird
+   es in den Einstellungen, damit es nicht an zwei Stellen verschieden steht. */
+.pota-konto { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.pota-konto-call {
+  font-weight: 600; font-size: 1rem; font-variant-numeric: tabular-nums;
+  padding: 0.4rem 0.7rem; border-radius: 9px;
+  background: var(--bg2); border: 1px solid var(--border);
+}
+.pota-konto .field-hint { flex: 1 1 8rem; }
+.pota-konto input[type="color"] {
+  width: 2.4rem; height: 2.3rem; padding: 0.15rem; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--bg2); cursor: pointer; flex: none;
+}
+
+
+/* ------------------------------------------------------ Zahnrad auf dem Handy
+
+   Breit steht das Panel neben der Karte, schmal liegt es als Blatt darunter.
+   Aufgemacht wird es hier, neben der Suche: oben am Daumen, und die Karte
+   bleibt unten ganz. */
+.pota-zahnrad { display: none; }
+@media (max-width: 52rem) {
+  .pota-zahnrad {
+    display: grid; position: absolute; z-index: 1000;
+    top: var(--pota-rand); right: var(--pota-rand);
+    width: var(--pota-suche-h); height: var(--pota-suche-h);
+  }
+  .pota-zahnrad[aria-expanded="true"] {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: var(--on-accent); border-color: transparent;
+  }
+}

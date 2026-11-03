@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 <title data-i18n="app.title">POTA-Map</title>
 <meta name="description" content="Schnelle Karte der POTA-Parkgrenzen in Deutschland, Österreich, der Schweiz, Liechtenstein, Tschechien, Dänemark und Luxemburg — mit Live-Spots.">
-<link rel="stylesheet" href="/maplibre-gl.css">
+<!-- MapLibres Stilvorlage haelt sonst das erste Zeichnen auf: 12,9 KB, davon
+     92 % ungenutzt, und gebraucht wird sie erst, wenn die Karte da ist - also
+     eine Sekunde spaeter. `media="print"` laedt sie ohne zu blockieren, das
+     onload schaltet sie scharf. Ohne Skript greift das noscript. -->
+<link rel="stylesheet" href="/maplibre-gl.css" media="print" onload="this.media='all';this.onload=null">
+<noscript><link rel="stylesheet" href="/maplibre-gl.css"></noscript>
 <link rel="stylesheet" href="/style.css">
 
 <!-- Otherwise the module chain app.js -> maplibre-gl.mjs -> ...-shared.mjs
@@ -67,11 +72,21 @@
       return e > B[0] && w < B[2] && north > B[1] && south < B[3];
     }
 
+    /* Whoever picked a raster base never sees our own base tiles, so
+       fetching them here would be mobile data thrown away. The foreign tiles
+       never enter this list: those are fetched by MapLibre alone, for what is
+       on the screen right now. */
+    var raster = true;   /* the default base is a raster one */
+    try {
+      var saved = JSON.parse(localStorage.getItem('pota-settings') || '{}');
+      raster = !(saved && (saved.base === 'light' || saved.base === 'dark'));
+    } catch (e) { /* no storage: the default it is, and that is raster */ }
+
     var urls = [];
     for (var x = x0; x <= x1 && urls.length < 16; x++) {
       for (var y = y0; y <= y1 && urls.length < 16; y++) {
         if (x < 0 || y < 0 || x >= n || y >= n || !inBounds(x, y)) continue;
-        urls.push('/t/basemap/' + z + '/' + x + '/' + y + '.mvt');
+        if (!raster) urls.push('/t/basemap/' + z + '/' + x + '/' + y + '.mvt');
         if (z >= 4) urls.push('/t/parks/' + z + '/' + x + '/' + y + '.mvt');
       }
     }
@@ -89,10 +104,17 @@
   </button>
   <h1 data-i18n="app.name">POTA-Map</h1>
   <div id="search-wrap">
-    <input id="search" type="search" data-i18n-placeholder="search.placeholder" autocomplete="off" spellcheck="false" data-i18n-label="search.aria">
+    <input id="search" type="search" placeholder="Referenz oder Name suchen&#8230;" data-i18n-placeholder="search.placeholder" autocomplete="off" spellcheck="false" data-i18n-label="search.aria">
     <ul id="results" role="listbox" hidden></ul>
   </div>
   <div id="status" data-i18n-title="status.title"></div>
+  <!-- Reporting sits in the header, not in a tab: a missing park or a wrong
+       boundary is noticed while looking at the map, and a report worth making
+       must not depend on finding the right tab first. Hidden until the server
+       says it has reporting, see src/main.js. -->
+  <button id="report-btn" class="icon-btn" data-i18n-label="report.button" data-i18n-title="report.button" hidden>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.5-4.6A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/><path d="M12 8v4"/><path d="M12 15.5h.01"/></svg>
+  </button>
   <div data-afu-menu data-ohne="pota-map.afu.tools" data-ausrichtung="rechts"></div>
 </header>
 
@@ -132,11 +154,29 @@
       <h2 data-i18n="look.head"></h2>
       <p class="seghead" data-i18n="look.language"></p>
       <select id="language" data-i18n-label="look.language"></select>
-      <p class="seghead" data-i18n="look.colours"></p>
+      <p class="seghead" data-i18n="look.base"></p>
+      <!-- The plain light vector theme has no button for the time being: it
+           leaves the path network hairline thin, and that is what people come
+           for. It is still built and still saved for offline use, see
+           HIDDEN_BASES in src/main.js - putting `<button data-base="light">`
+           back here is all it takes to have it again. The pastel base is the
+           same tiles with a warmer palette and the paths drawn. -->
       <div class="seg" id="basemaps">
-        <button data-base="light" class="on" data-i18n="look.light"></button>
+        <button data-base="osm" class="on" data-i18n="look.light"></button>
+        <button data-base="pastel" data-i18n="look.pastel"></button>
         <button data-base="dark" data-i18n="look.dark"></button>
+        <button data-base="topo" data-i18n="look.topo"></button>
       </div>
+      <!-- Filled from the catalogue: which text belongs here depends on the
+           base that is on, see showBaseHint() in src/main.js. -->
+      <p class="hint" id="base-hint" hidden></p>
+      <p class="seghead" data-i18n="look.saturation"></p>
+      <div class="sliderrow">
+        <input type="range" id="saturation" min="0" max="100" step="5" value="55"
+               data-i18n-label="look.saturation">
+        <output id="saturation-value" for="saturation"></output>
+      </div>
+      <p class="hint" data-i18n="look.satHint"></p>
       <p class="seghead" data-i18n="look.sharpness"></p>
       <div class="seg" id="quality">
         <button data-q="auto" class="on" data-i18n="look.auto"></button>
@@ -246,6 +286,19 @@
       <label class="check"><input type="checkbox" id="opt-poi-target"> <span data-i18n="poi.group.target"></span></label>
       <label class="check"><input type="checkbox" id="opt-poi-qrm"> <span data-i18n="poi.group.qrm"></span></label>
       <p class="hint" data-i18n="poi.hint"></p>
+      <p class="seghead" data-i18n="poi.zoom"></p>
+      <div class="sliderrow">
+        <input type="range" id="poi-zoom" min="13" max="18" step="1" value="15"
+               data-i18n-label="poi.zoom">
+        <output id="poi-zoom-value" for="poi-zoom"></output>
+      </div>
+      <p class="hint" data-i18n="poi.zoomHint"></p>
+      <p class="seghead" data-i18n="poi.size"></p>
+      <div class="sliderrow">
+        <input type="range" id="poi-size" min="60" max="200" step="10" value="100"
+               data-i18n-label="poi.size">
+        <output id="poi-size-value" for="poi-size"></output>
+      </div>
     </section>
 
     <section>
@@ -254,11 +307,16 @@
       <p class="hint" id="offline-hint" data-i18n="offline.hint"></p>
     </section>
 
+    <!-- Everything the map has kept on the device. Tiles are only ever
+         replaced, never dropped first, so the one way to get rid of an old
+         stock is to say so. -->
     <section>
-      <h2 data-i18n="report.head"></h2>
-      <button id="report-btn" class="wide-btn" data-i18n="report.button" hidden></button>
-      <p class="hint" id="report-hint" data-i18n="report.hint" hidden></p>
+      <h2 data-i18n="storage.head"></h2>
+      <p class="hint" id="storage-size" data-i18n="storage.checking"></p>
+      <button id="storage-btn" class="wide-btn" data-i18n="storage.clear"></button>
+      <p class="hint" data-i18n="storage.hint"></p>
     </section>
+
   </div>
 
   <!-- Credits. Every data source that goes into the map is named here with its
@@ -276,6 +334,8 @@
       <p id="credits-pota"></p>
       <p id="credits-sota"></p>
       <p id="credits-pois"></p>
+      <p id="credits-places"></p>
+      <p id="credits-raster"></p>
     </details>
   </footer>
 </aside>

@@ -125,7 +125,6 @@ export function startReporting(map, t) {
   // main.js only loads this module when the server has reporting, so the
   // button can come out right away.
   button.hidden = false;
-  $("#report-hint").hidden = false;
 
   button.addEventListener("click", async () => {
     await draw();
@@ -311,6 +310,7 @@ export function startReporting(map, t) {
       return;
     }
     content.replaceChildren(
+      el("p", { class: "hint" }, t("report.hint")),
       form(),
       el("h3", { class: "report-heading" }, t("report.mine")),
       list(),

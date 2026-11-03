@@ -20,6 +20,9 @@ Output:
   pois.geojson  - points, one per feature (areas are reduced to a point)
   qrm.geojson   - lines: power lines and electrified railways, the two things
                   you do not want to set up under
+  roads.geojson - lines: roads that carry through traffic. Never drawn, never
+                  turned into tiles - input for the quiet score of the places,
+                  see compute_places.py
   cache/poi_counts.json
 """
 import json
@@ -58,6 +61,13 @@ DOWNLOAD_TIMEOUT = 3600
 # Lines belong in their own file: they are drawn as lines, not as symbols.
 LINE_KINDS = ("powerline", "railway")
 
+# What "quiet" means for a spot. Only the classes that carry through traffic:
+# the full road network would blow up the filtered extracts, and a residential
+# street 300 m away is not the noise anyone means.
+LOUD_ROADS = ("motorway", "trunk", "primary", "secondary", "tertiary",
+              "motorway_link", "trunk_link", "primary_link", "secondary_link",
+              "tertiary_link")
+
 
 def classify(t):
     """OSM tags -> (group, kind), or None for everything we do not want.
@@ -93,8 +103,17 @@ def classify(t):
     if t.get("highway") == "bus_stop" or railway in ("station", "halt", "tram_stop"):
         return "access", "transit"
 
+    # Loud roads. Their own group, not `qrm`: the QRM tick in the interface
+    # means power lines and overhead wire, and it must not start drawing
+    # motorways. They never reach the tiles, they are input for the scoring
+    # in compute_places.py.
+    if t.get("highway") in LOUD_ROADS:
+        return "noise", "road"
+
     if amenity == "bench":
         return "comfort", "bench"
+    if leisure == "lounger":
+        return "comfort", "lounger"
     if amenity == "shelter":
         return "comfort", "shelter"
     if tourism in ("alpine_hut", "wilderness_hut"):
@@ -111,6 +130,12 @@ def classify(t):
     if amenity in ("restaurant", "cafe", "pub", "biergarten", "fast_food") \
             or shop in ("supermarket", "convenience", "bakery"):
         return "supply", "food"
+
+    # Not a destination for us and never drawn: an attraction is where the
+    # coaches stop, and that is worth knowing when looking for quiet. Its own
+    # group, so no tick in the interface ever switches it on.
+    if tourism == "attraction":
+        return "crowd", "attraction"
 
     if tourism == "viewpoint":
         return "view", "viewpoint"
@@ -214,7 +239,10 @@ class Collection:
 
     def add(self, geometry, props):
         if self.count:
-            self.fh.write(",")
+            # One feature per line. Costs a few megabytes of newlines and lets
+            # everything downstream read the file line by line instead of
+            # parsing a gigabyte in one go - see compute_places.py.
+            self.fh.write(",\n")
         json.dump({"type": "Feature", "geometry": geometry, "properties": props},
                   self.fh, ensure_ascii=False)
         self.count += 1
@@ -267,6 +295,7 @@ def main():
 
     points = Collection(os.path.join(DATA, "pois.geojson"))
     lines = Collection(os.path.join(DATA, "qrm.geojson"))
+    roads = Collection(os.path.join(DATA, "roads.geojson"))
     kinds = Counter()
     skipped = 0
 
@@ -286,7 +315,7 @@ def main():
                 continue
         if not path:
             continue
-        before = points.count + lines.count
+        before = points.count + lines.count + roads.count
         for feature in read_features(path):
             tags = feature.get("properties") or {}
             what = classify(tags)
@@ -302,7 +331,13 @@ def main():
             geometry = feature.get("geometry")
             if not geometry:
                 continue
-            if kind in LINE_KINDS:
+            if group == "noise":
+                if geometry["type"] not in ("LineString", "MultiLineString"):
+                    continue
+                # No name and no kind detail: this file is only ever asked
+                # "how far away is the nearest one".
+                roads.add(geometry, {"kind": kind, "group": group})
+            elif kind in LINE_KINDS:
                 if geometry["type"] not in ("LineString", "MultiLineString"):
                     continue
                 lines.add(geometry, props)
@@ -312,14 +347,17 @@ def main():
                     continue
                 points.add(geometry, props)
             kinds[kind] += 1
-        print(f"  {code}: {points.count + lines.count - before} kept", flush=True)
+        print(f"  {code}: {points.count + lines.count + roads.count - before} kept",
+              flush=True)
 
     points.close()
     lines.close()
+    roads.close()
     save(os.path.join(CACHE, "poi_counts.json"), dict(kinds))
 
     print(f"{points.count} points -> {points.path}")
     print(f"{lines.count} lines -> {lines.path}")
+    print(f"{roads.count} roads -> {roads.path}")
     print(f"{skipped} objects came through the tag filter but fit no category")
     for kind, n in kinds.most_common():
         print(f"  {kind:12} {n}")

@@ -39,6 +39,14 @@ const GLYPHS = {
     line(c, 15, 12, 15, 16);
   },
 
+  // A bench you lie on: the same slats, with the back end raised.
+  lounger: (c) => {
+    line(c, 4, 13, 16, 13);
+    line(c, 12, 13, 17, 8);
+    line(c, 6, 13, 6, 16);
+    line(c, 14, 13, 14, 16);
+  },
+
   shelter: (c) => {
     line(c, 4, 10, 11, 5);
     line(c, 11, 5, 18, 10);
@@ -225,12 +233,12 @@ function letter(c, text, size = 12) {
 }
 
 /** One symbol: a disc in the group colour, a white glyph on top. */
-function draw(kind, color) {
+function draw(kind, color, ratio = RATIO) {
   const canvas = document.createElement("canvas");
-  canvas.width = SIZE * RATIO;
-  canvas.height = SIZE * RATIO;
+  canvas.width = SIZE * ratio;
+  canvas.height = SIZE * ratio;
   const c = canvas.getContext("2d");
-  c.scale(RATIO, RATIO);
+  c.scale(ratio, ratio);
 
   // A white ring keeps the symbol readable on dark forest and bright field
   // alike - the same trick the park points use.
@@ -256,14 +264,26 @@ function draw(kind, color) {
   return c.getImageData(0, 0, canvas.width, canvas.height);
 }
 
+/* What the symbols were last drawn at. Someone who pulls them up to twice
+   the size gets twice the pixels, otherwise the disc turns to mush - the
+   bitmap is the same either way, only stretched further. */
+let drawnRatio = 0;
+
 /**
  * Register every symbol with the map. Has to run again after a style change -
- * `setStyle` throws the images away with everything else.
+ * `setStyle` throws the images away with everything else - and again when the
+ * symbols are to be drawn at a different size.
  */
-export function addPoiIcons(map, colorOf) {
+export function addPoiIcons(map, colorOf, ratio = RATIO) {
+  const wanted = Math.max(1, Math.round(ratio));
+  const coarse = wanted !== drawnRatio;
   for (const kind of Object.keys(GLYPHS)) {
     const id = "poi-" + kind;
-    if (map.hasImage(id)) continue;
-    map.addImage(id, draw(kind, colorOf(kind)), { pixelRatio: RATIO });
+    if (map.hasImage(id)) {
+      if (!coarse) continue;
+      map.removeImage(id);
+    }
+    map.addImage(id, draw(kind, colorOf(kind), wanted), { pixelRatio: wanted });
   }
+  drawnRatio = wanted;
 }

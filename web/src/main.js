@@ -1,6 +1,10 @@
 import * as maplibregl from "/vendor/maplibre-gl.mjs";
 import { Protocol } from "pmtiles";
-import { noLabels, labels as themeLabels } from "protomaps-themes-base";
+import {
+  namedTheme,
+  noLabelsWithCustomTheme,
+  labelsWithCustomTheme,
+} from "protomaps-themes-base";
 import { startTracking } from "./tracking.js";
 import { t, applyStatic, currentLanguage, setLanguage, LANGUAGES } from "./i18n.js";
 import { addPoiIcons } from "./poiicons.js";
@@ -15,6 +19,7 @@ const COLOR_NEVER = "#9333ea";
 const COLOR_POINT = "#0ea5e9";
 const COLOR_TRAIL = "#1d4ed8";
 const COLOR_PLAN = "#8b5cf6";
+const COLOR_PLACE = "#059669";
 const COLOR_SPOT = "#f59e0b";
 const COLOR_HUNT = "#0d9488";
 
@@ -26,6 +31,13 @@ const TABS = ["map", "spots", "me", "outdoors"];
    it is stands in the popup. */
 const POI_GROUPS = ["access", "comfort", "supply", "view", "orientation", "target", "qrm"];
 
+/* Dots below, symbols above: at 13 and 14 a symbol would be a smudge and
+   there can be a few thousand on screen at once, but where the switch belongs
+   depends on the screen and on what you are after, so it is a setting. The
+   tiles start at 13, which is the floor for both. */
+const POI_ZOOM = { min: 13, max: 18, standard: 15 };
+const POI_SIZE = { min: 60, max: 200, standard: 100 };
+
 /* Which group a kind belongs to. The tiles carry the group as a property -
    this table is only here to colour the symbols, which are drawn once and
    cannot read a filter expression. `classify()` in fetch_osm_pois.py is the
@@ -33,7 +45,7 @@ const POI_GROUPS = ["access", "comfort", "supply", "view", "orientation", "targe
 const POI_KIND_GROUP = {
   parking: "access", transit: "access",
   bench: "comfort", shelter: "comfort", hut: "comfort", picnic: "comfort",
-  camp: "comfort",
+  camp: "comfort", lounger: "comfort",
   toilets: "supply", water: "supply", food: "supply",
   viewpoint: "view", tower: "view", peak: "view",
   guidepost: "orientation", board: "orientation",
@@ -63,6 +75,63 @@ const PARKS_TILES = "/t/parks/{z}/{x}/{y}.mvt";
 const POIS_TILES = "/t/pois/{z}/{x}/{y}.mvt";
 const BOUNDS = [5.5, 45.4, 19.2, 58.1];
 
+/* Two bases of foreign raster tiles next to our own vector one. Ours carries
+   no path network, no forest tracks and no contours - which is exactly what
+   is missing once you leave the road, and what every other POTA map shows.
+
+   `osm` is the standard OpenStreetMap rendering, the same tiles pota-map.info
+   uses. It is what the map starts with, and it is the one the button labelled
+   "Hell" switches to. `topo` is OpenTopoMap: the same data drawn for walking,
+   with contour lines and hillshade.
+
+   Both are other people's servers, and their terms decide how we treat them:
+   fetched for what is on the screen, never ahead of time. They are left out
+   of both prefetchers and out of the offline store, and the worker keeps what
+   was looked at - which is what the OSM tile policy asks for anyway ("keep a
+   sufficient local cache"). Whoever adds one here adds its host to
+   RASTER_HOSTS in sw.js, otherwise nothing of it is kept.
+
+   The attribution is their wording, not ours: naming them this way is the
+   licence condition, and it must not be shortened. */
+const OSM_ATTRIBUTION =
+  '© <a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende';
+
+const RASTER_BASES = {
+  osm: {
+    tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+    // Drawn up to 19; our map stops at 18 anyway.
+    maxzoom: 19,
+    attribution: OSM_ATTRIBUTION,
+  },
+  topo: {
+    tiles: [
+      "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+      "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
+      "https://c.tile.opentopomap.org/{z}/{x}/{y}.png",
+    ],
+    // Their rendering ends here. MapLibre stretches the last level up to 18.
+    maxzoom: 17,
+    attribution:
+      'Kartendaten: ' + OSM_ATTRIBUTION + ', SRTM | Kartendarstellung: '
+      + '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA)',
+  },
+};
+
+/* Our own light vector base is switched off in the interface for the time
+   being, but stays a valid value: it is still what the offline store holds,
+   and a stored setting must not turn into nonsense. Whoever brings the button
+   back adds it to index.html, nothing else is needed. */
+/* How much colour the base map keeps, in percent. A base map is the ground,
+   not the subject: at full strength a red park boundary on an orange road is
+   hard to follow. Foreign maps are drawn to stand alone and start held back
+   for that reason; ours are already muted by design and start as they were
+   drawn. Both are one drag away from anything else, and each side remembers
+   its own setting - what suits a topographic map is not what suits pastel. */
+const DEFAULT_SATURATION = { own: 100, foreign: 55 };
+
+const HIDDEN_BASES = ["light"];
+const BASES = ["light", "dark", "pastel", ...Object.keys(RASTER_BASES)];
+
 const params = new URLSearchParams(location.search);
 
 const state = {
@@ -80,6 +149,8 @@ const state = {
   // How you get there and where you can sit are the two questions everybody
   // has; the rest is on request.
   poiGroups: new Set(["access", "comfort"]),
+  poiZoom: POI_ZOOM.standard,
+  poiSize: POI_SIZE.standard,
   showPlans: false,
   onlyNfer: false,
   hideMine: false,
@@ -91,7 +162,10 @@ const state = {
   appliedHunt: [],
   // `band` holds every band that is ticked; empty means all of them.
   spotFilter: { band: [], mode: "", fresh: false, hideQrt: false, hideHunted: false, sort: "age" },
-  base: "light",
+  // The standard OpenStreetMap rendering: what a park looks for is the path
+  // to it, and our own vector base does not draw one.
+  base: "osm",
+  saturation: { ...DEFAULT_SATURATION },
   tab: "map",
   hovered: null,
   appliedNever: [],
@@ -127,10 +201,13 @@ function saveSettings() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
       programs: [...state.programs],
       base: state.base,
+      saturation: state.saturation,
       tab: state.tab,
       spots: state.showSpots,
       sota: state.showSota,
       pois: [...state.poiGroups],
+      poiZoom: state.poiZoom,
+      poiSize: state.poiSize,
       never: state.showNever,
       points: state.showPoints,
       plans: state.showPlans,
@@ -157,13 +234,29 @@ function restoreSettings() {
   if (Array.isArray(g.programs) && g.programs.length) {
     state.programs = new Set(g.programs.filter((c) => PROGRAMS.includes(c)));
   }
-  if (g.base && ["light", "dark"].includes(g.base)) state.base = g.base;
+  // "outdoor" was the name until 01.09.2026, and whoever is still on the
+  // light vector base has no button to leave it with - both land on what the
+  // interface offers instead.
+  const base = g.base === "outdoor" ? "topo" : g.base;
+  if (base && BASES.includes(base) && !HIDDEN_BASES.includes(base)) state.base = base;
+  // Was a three way switch for foreign bases only until 04.09.2026.
+  const OLD_SATURATION = { full: 100, muted: 55, grey: 0 };
+  const stored = typeof g.saturation === "string"
+    ? { foreign: OLD_SATURATION[g.saturation] }
+    : g.saturation;
+  if (stored && typeof stored === "object") {
+    for (const key of ["own", "foreign"]) {
+      if (Number.isFinite(stored[key])) state.saturation[key] = clampPercent(stored[key]);
+    }
+  }
   if (g.tab && TABS.includes(g.tab)) state.tab = g.tab;
   if (typeof g.spots === "boolean") state.showSpots = g.spots;
   if (typeof g.sota === "boolean") state.showSota = g.sota;
   if (Array.isArray(g.pois)) {
     state.poiGroups = new Set(g.pois.filter((x) => POI_GROUPS.includes(x)));
   }
+  if (Number.isFinite(g.poiZoom)) state.poiZoom = clampRange(g.poiZoom, POI_ZOOM);
+  if (Number.isFinite(g.poiSize)) state.poiSize = clampRange(g.poiSize, POI_SIZE);
   if (typeof g.never === "boolean") state.showNever = g.never;
   if (typeof g.points === "boolean") state.showPoints = g.points;
   if (typeof g.plans === "boolean") state.showPlans = g.plans;
@@ -190,16 +283,35 @@ function emptyFC() {
 }
 
 function baseSources() {
+  // One base at a time: whoever looks at a raster map should not pay for
+  // vector tiles nobody draws.
+  const raster = RASTER_BASES[state.base];
+  const base = raster
+    ? {
+      raster: {
+        type: "raster",
+        tiles: raster.tiles,
+        tileSize: 256,
+        // No `bounds`: their rendering covers the world, and a grey area
+        // outside DACH would look like a fault.
+        maxzoom: raster.maxzoom,
+        attribution: raster.attribution,
+      },
+    }
+    : {
+      basemap: {
+        type: "vector",
+        tiles: [BASEMAP_TILES],
+        minzoom: 0,
+        maxzoom: 14,
+        bounds: BOUNDS,
+        attribution:
+          '<a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      },
+    };
+
   return {
-    basemap: {
-      type: "vector",
-      tiles: [BASEMAP_TILES],
-      minzoom: 0,
-      maxzoom: 14,
-      bounds: BOUNDS,
-      attribution:
-        '<a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-    },
+    ...base,
     parks: {
       type: "vector",
       tiles: [PARKS_TILES],
@@ -224,6 +336,8 @@ function baseSources() {
     },
     spots: { type: "geojson", data: emptyFC() },
     plans: { type: "geojson", data: emptyFC() },
+    // The best places of the park that is open in the popup, nothing else.
+    places: { type: "geojson", data: emptyFC() },
   };
 }
 
@@ -345,6 +459,33 @@ function poiFilter() {
 
 function poiVisibility() {
   return state.poiGroups.size ? "visible" : "none";
+}
+
+function clampRange(value, range) {
+  return Math.min(range.max, Math.max(range.min, Math.round(value)));
+}
+
+/* With the switch at the very bottom there is no room left for dots: the
+   tiles start at 13, so a dot layer from 13 to 13 would be an empty band. */
+function poiDotVisibility() {
+  return state.poiGroups.size && state.poiZoom > POI_ZOOM.min ? "visible" : "none";
+}
+
+/* Drawn with as many pixels as the chosen size asks for: at 200 percent a
+   symbol made for 100 would be a stretched bitmap. */
+function poiIconRatio() {
+  return Math.min(4, Math.max(2, Math.ceil(2 * state.poiSize / 100)));
+}
+
+/* The symbols grow over the first two zoom levels they are shown at, so the
+   switch is not a step change in size. The chosen size scales both ends. */
+function poiIconSize() {
+  const factor = state.poiSize / 100;
+  return [
+    "interpolate", ["linear"], ["zoom"],
+    state.poiZoom, 0.75 * factor,
+    state.poiZoom + 2, 1 * factor,
+  ];
 }
 
 function poiColorExpression() {
@@ -482,17 +623,16 @@ function parkLayers() {
       },
     },
     {
-      // The overview: at 13 and 14 a symbol would be a smudge, and there can
-      // be a few thousand of them on the screen. A dot says "something is
-      // here", the symbol above says what.
+      // The overview below the switch: a dot says "something is here", the
+      // symbol above says what. Where the two meet is a setting, see POI_ZOOM.
       id: "poi-dot",
       type: "circle",
       source: "pois",
       "source-layer": "pois",
-      minzoom: 13,
-      maxzoom: 15,
+      minzoom: POI_ZOOM.min,
+      maxzoom: state.poiZoom,
       filter: poiFilter(),
-      layout: { visibility: poiVisibility() },
+      layout: { visibility: poiDotVisibility() },
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 15, 4, 18, 7],
         "circle-color": poiColorExpression(),
@@ -502,13 +642,13 @@ function parkLayers() {
       },
     },
     {
-      // From 15 on you should not have to click to know what is there. The
-      // symbols are drawn at runtime, see poiicons.js.
+      // From the switch on you should not have to click to know what is
+      // there. The symbols are drawn at runtime, see poiicons.js.
       id: "poi-symbol",
       type: "symbol",
       source: "pois",
       "source-layer": "pois",
-      minzoom: 15,
+      minzoom: state.poiZoom,
       filter: poiFilter(),
       layout: {
         visibility: poiVisibility(),
@@ -517,7 +657,7 @@ function parkLayers() {
           ["image", ["concat", "poi-", ["get", "kind"]]],
           ["image", "poi-generic"],
         ],
-        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.75, 17, 1],
+        "icon-size": poiIconSize(),
         // Overlapping symbols make a wall of colour. Whoever is hidden here
         // is still in the tile and still answers a click.
         "icon-allow-overlap": false,
@@ -628,6 +768,37 @@ function parkLayers() {
       },
     },
     {
+      // Ranked places of the open park. Numbered, because the list beside
+      // them is numbered too and a colour cannot say "third best".
+      id: "places-halo",
+      type: "circle",
+      source: "places",
+      paint: { "circle-radius": 15, "circle-color": COLOR_PLACE, "circle-opacity": 0.18 },
+    },
+    {
+      id: "places-dot",
+      type: "circle",
+      source: "places",
+      paint: {
+        "circle-radius": 11,
+        "circle-color": COLOR_PLACE,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
+    },
+    {
+      id: "places-rank",
+      type: "symbol",
+      source: "places",
+      layout: {
+        "text-field": ["get", "rank"],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": 12,
+        "text-allow-overlap": true,
+      },
+      paint: { "text-color": "#ffffff" },
+    },
+    {
       id: "spots-label",
       type: "symbol",
       source: "spots",
@@ -648,13 +819,25 @@ function parkLayers() {
   ];
 }
 
-/** Show the ticked POI groups, hide the layers when nothing is ticked. */
+/**
+ * Show the ticked POI groups, hide the layers when nothing is ticked, and
+ * apply where dots turn into symbols and how large those are drawn. Zoom
+ * range and icon size are set on the live layers - rebuilding the style for
+ * a slider would throw away every tile on screen.
+ */
 function refreshPois() {
-  addPoiIcons(map, (kind) => POI_COLORS[POI_KIND_GROUP[kind]] || "#64748b");
+  addPoiIcons(map, (kind) => POI_COLORS[POI_KIND_GROUP[kind]] || "#64748b", poiIconRatio());
   for (const id of ["qrm-line", "poi-dot", "poi-symbol"]) {
     if (!map.getLayer(id)) continue;
-    map.setLayoutProperty(id, "visibility", poiVisibility());
+    map.setLayoutProperty(id, "visibility", id === "poi-dot" ? poiDotVisibility() : poiVisibility());
     map.setFilter(id, poiFilter());
+  }
+  if (map.getLayer("poi-dot")) {
+    map.setLayerZoomRange("poi-dot", POI_ZOOM.min, Math.max(state.poiZoom, POI_ZOOM.min + 0.5));
+  }
+  if (map.getLayer("poi-symbol")) {
+    map.setLayerZoomRange("poi-symbol", state.poiZoom, 24);
+    map.setLayoutProperty("poi-symbol", "icon-size", poiIconSize());
   }
   const legend = el("legend-pois");
   if (legend) legend.hidden = !state.poiGroups.size;
@@ -662,20 +845,203 @@ function refreshPois() {
 
 /** Match the interface to the chosen basemap. */
 function applyTheme() {
-  document.documentElement.dataset.theme = state.base === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = state.base === "dark" ? "dark" : "light";
+}
+
+/* A warm, low saturation reading of our own vector base: cream where people
+   live, sage for the woods, pale blue water. Two things it does that the
+   plain light theme does not - it keeps the colours far enough apart to tell
+   a meadow from a forest at a glance, and it draws the path network. How you
+   get in is the question a park raises, and a footpath in near white on near
+   white answers nothing. Like the dark base it needs no network. */
+const PASTEL_THEME = {
+  ...namedTheme("light"),
+  background: "#e6dfd3",
+  earth: "#f3ede5",
+  park_a: "#e4ead6",
+  park_b: "#cfdcbc",
+  wood_a: "#dbe3cc",
+  wood_b: "#c8d3bd",
+  scrub_a: "#e2e6cf",
+  scrub_b: "#d3dcbb",
+  hospital: "#f0e4e0",
+  school: "#efe8dc",
+  industrial: "#e6e3dd",
+  military: "#e5e1d8",
+  zoo: "#dfe6d6",
+  pedestrian: "#ece5d9",
+  sand: "#f0e9d8",
+  beach: "#f2ead4",
+  glacier: "#f2f2f0",
+  aerodrome: "#e6e3dd",
+  runway: "#f2efe9",
+  water: "#cfdce8",
+  buildings: "#d8d1c4",
+  // Roads keep the usual reading: white surface, one warm grey casing.
+  minor_service_casing: "#d5cdbb",
+  minor_casing: "#d5cdbb",
+  link_casing: "#cbc2ae",
+  major_casing_late: "#c9bfa9",
+  highway_casing_late: "#bdb29a",
+  major_casing_early: "#c9bfa9",
+  highway_casing_early: "#bdb29a",
+  bridges_other_casing: "#d5cdbb",
+  bridges_minor_casing: "#d5cdbb",
+  bridges_link_casing: "#cbc2ae",
+  bridges_major_casing: "#c9bfa9",
+  bridges_highway_casing: "#bdb29a",
+  tunnel_other_casing: "#e4ded2",
+  tunnel_minor_casing: "#e4ded2",
+  tunnel_link_casing: "#e4ded2",
+  tunnel_major_casing: "#e4ded2",
+  tunnel_highway_casing: "#e4ded2",
+  pier: "#d5cdbb",
+  tunnel_other: "#e8e2d8",
+  tunnel_minor: "#e8e2d8",
+  tunnel_link: "#e8e2d8",
+  tunnel_major: "#e8e2d8",
+  tunnel_highway: "#e8e2d8",
+  minor_service: "#f6f2ea",
+  minor_a: "#f6f2ea",
+  minor_b: "#ffffff",
+  bridges_other: "#f6f2ea",
+  bridges_major: "#fbf8f3",
+  // `other` carries the tracks and footpaths, see PATH_LAYERS below.
+  other: "#b6a488",
+  railway: "#a99f8f",
+  boundaries: "#b9ab99",
+  roads_label_minor: "#8a8175",
+  roads_label_major: "#7d7568",
+  city_label: "#4f4a42",
+  city_label_halo: "#f3ede5",
+  subplace_label: "#8b8377",
+  subplace_label_halo: "#f3ede5",
+  state_label: "#a49b8c",
+  state_label_halo: "#f3ede5",
+  country_label: "#9c9384",
+  peak_label: "#7d8a70",
+  ocean_label: "#7f9ab0",
+  address_label: "#918878",
+  landcover: {
+    grassland: "rgba(224, 233, 203, 1)",
+    barren: "rgba(240, 234, 216, 1)",
+    urban_area: "rgba(236, 231, 222, 1)",
+    farmland: "rgba(230, 236, 208, 1)",
+    glacier: "rgba(250, 250, 248, 1)",
+    scrub: "rgba(234, 236, 208, 1)",
+    forest: "rgba(200, 211, 189, 1)",
+  },
+};
+
+/* The theme paints tracks and paths but leaves them hairline thin until
+   zoom 20, which on this map means invisible. Same line, drawn early enough
+   to be read as a way in. */
+const PATH_LAYERS = new Set(["roads_other", "roads_bridges_other", "roads_tunnels_other"]);
+const PATH_WIDTH = [
+  "interpolate", ["exponential", 1.6], ["zoom"],
+  12, 0.4,
+  14, 0.9,
+  16, 1.8,
+  20, 6,
+];
+
+/* Taking colour out of a vector base is not `raster-saturation` - there is no
+   picture to filter, and filtering the canvas would drain our own park
+   colours with it. So the theme is faded before the layers are built: every
+   colour is mixed towards its own brightness, which is what the raster
+   filter does to a tile. Only the base map is touched; the outlines, spots
+   and POIs on top keep their colour, and that is the whole point. */
+function fadeColour(value, factor) {
+  const hex = /^#([0-9a-f]{6})$/i.exec(value);
+  const rgb = /^rgba?\(([^)]+)\)$/i.exec(value);
+  let parts;
+  let alpha = null;
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    parts = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  } else if (rgb) {
+    const nums = rgb[1].split(",").map((x) => parseFloat(x));
+    if (nums.length < 3 || nums.some((x) => !Number.isFinite(x))) return value;
+    parts = nums.slice(0, 3);
+    if (nums.length > 3) alpha = nums[3];
+  } else {
+    return value;   // named colours and expressions stay as they are
+  }
+  const grey = 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2];
+  const mixed = parts.map((c) =>
+    Math.max(0, Math.min(255, Math.round(grey + (c - grey) * factor))));
+  return alpha === null
+    ? `rgb(${mixed.join(", ")})`
+    : `rgba(${mixed.join(", ")}, ${alpha})`;
+}
+
+/** A theme with every colour faded. Nested groups (POIs, land cover) too. */
+function fadeTheme(theme, percent) {
+  if (percent >= 100) return theme;
+  const factor = Math.max(0, percent) / 100;
+  const out = {};
+  for (const [key, value] of Object.entries(theme)) {
+    if (typeof value === "string") out[key] = fadeColour(value, factor);
+    else if (value && typeof value === "object") out[key] = fadeTheme(value, percent);
+    else out[key] = value;
+  }
+  return out;
+}
+
+function clampPercent(value) {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+/** Which of the two settings the base on screen is governed by. */
+function saturationKey() {
+  return RASTER_BASES[state.base] ? "foreign" : "own";
+}
+
+function currentSaturation() {
+  return state.saturation[saturationKey()];
+}
+
+/** Same strength for a raster base, in the units the filter takes: 0 to -1. */
+function rasterSaturation() {
+  return currentSaturation() / 100 - 1;
+}
+
+/** The theme the current base is drawn with, faded to the chosen strength. */
+function baseTheme() {
+  const theme = state.base === "pastel"
+    ? PASTEL_THEME
+    : namedTheme(state.base === "dark" ? "dark" : "light");
+  return fadeTheme(theme, currentSaturation());
+}
+
+/** Base layers of a vector base. The library objects are copied, never changed. */
+function vectorLayers() {
+  const widenPaths = state.base === "pastel";
+  return noLabelsWithCustomTheme("basemap", baseTheme()).map((layer) =>
+    (widenPaths && PATH_LAYERS.has(layer.id)
+      ? { ...layer, paint: { ...layer.paint, "line-width": PATH_WIDTH } }
+      : layer));
 }
 
 function buildStyle() {
   const sources = baseSources();
   // Areas and lines first. Labels are added after the first frame - they pull
   // in 650 KB of glyphs and are not the first thing needed to get your
-  // bearings.
-  const layers = noLabels("basemap", state.base === "dark" ? "dark" : "light");
+  // bearings. The raster base needs neither: its labels are in the picture.
+  const layers = RASTER_BASES[state.base]
+    ? [{
+      id: "raster",
+      type: "raster",
+      source: "raster",
+      paint: { "raster-saturation": rasterSaturation() },
+    }]
+    : vectorLayers();
+  const sprites = state.base === "dark" ? "dark" : "light";
 
   return {
     version: 8,
     glyphs: "/fonts/{fontstack}/{range}.pbf",
-    sprite: location.origin + "/sprites/" + (state.base === "dark" ? "dark" : "light"),
+    sprite: location.origin + "/sprites/" + sprites,
     sources,
     layers: [...layers, ...parkLayers()],
   };
@@ -683,6 +1049,18 @@ function buildStyle() {
 
 restoreSettings();
 applyTheme();
+
+/* Register before the map is built, not once it has loaded: until the worker
+   is in charge, every tile passes it by and is not kept. It claims the open
+   page as soon as it is active (see sw.js) - measured, that is early enough
+   for our own tiles on the very first visit. Foreign raster tiles are
+   requested before that and are only kept from the second visit on; nothing
+   can be done about that from here. */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch((err) => {
+    console.warn("service worker:", err);
+  });
+}
 
 const start = readHash() || { center: [10.2, 50.71], zoom: 5.4 };
 
@@ -796,6 +1174,8 @@ function restyle() {
     state.appliedHunt = [];
     refreshParkPaint();
     if (spotData && map.getSource("spots")) map.getSource("spots").setData(spotData);
+    // The popup survives a change of base map, so its markers have to as well.
+    if (placesOnMap) showPlacesOnMap(placesOnMap);
     scheduleLabels();
   });
 }
@@ -806,12 +1186,15 @@ let labelsAdded = false;
 
 /** Add the place and street labels of the basemap after the first frame. */
 function addBasemapLabels() {
+  // A raster base brings its own names - a second set on top would be a
+  // duplicate in a different font.
+  if (RASTER_BASES[state.base]) return;
   if (labelsAdded || !map.isStyleLoaded()) return;
   labelsAdded = true;
-  const theme = state.base === "dark" ? "dark" : "light";
   // Insert below our own layers so the order stays intact
   const anchor = map.getLayer("parks-fill") ? "parks-fill" : undefined;
-  for (const layer of themeLabels("basemap", theme, "de")) {
+  const labelLayers = labelsWithCustomTheme("basemap", baseTheme(), "de");
+  for (const layer of labelLayers) {
     if (!map.getLayer(layer.id)) {
       try {
         map.addLayer(layer, anchor);
@@ -848,11 +1231,15 @@ async function loadJSON(url) {
 /** Small and needed at once: which parks were never activated, plus counts. */
 async function loadBasics() {
   try {
-    const [never, stats] = await Promise.all([
+    const [never, stats, places] = await Promise.all([
       loadJSON("/data/never_activated.json"),
       loadJSON("/data/stats.json").catch(() => null),
+      // Count and best score per park. Knowing this before the popup opens
+      // saves a request for every park that has nothing to show.
+      loadJSON("/data/places_index.json").catch(() => null),
     ]);
     state.never = never;
+    placesIndex = places || {};
     refreshParkPaint();
     if (stats && stats.total) {
       setStatus(t("stats.parks", { parks: stats.total.parks, areas: stats.total.areas }));
@@ -1532,7 +1919,7 @@ map.on("click", (e) => {
         '</h3><p class="meta">' +
         esc(t("popup.summit", { alt: p.alt, points: p.pts, activations: p.acts })) +
         '</p><nav><a href="https://sotl.as/summits/' +
-        encodeURIComponent(p.ref) + '" target="_blank" rel="noopener">' + t("popup.openSotlas") + "</a></nav></div>",
+        encodePath(p.ref) + '" target="_blank" rel="noopener">' + t("popup.openSotlas") + "</a></nav></div>",
     );
   }
   if (poi) {
@@ -1561,6 +1948,9 @@ map.on("click", (e) => {
       '<div class="pop"><h3><span class="ref">' + esc(p.ref) + "</span> " + esc(p.name) +
         '</h3><p class="meta">' + origin + "</p>" + nfer +
         '<div class="parkinfo" data-ref="' + esc(p.ref) + '">' + t("popup.loading") + "</div>" +
+        (hasPlaces(p.ref)
+          ? '<div class="places" data-ref="' + esc(p.ref) + '">' + t("popup.loading") + "</div>"
+          : "") +
         '<nav><a href="https://pota.app/#/park/' +
         encodeURIComponent(p.ref) + '" target="_blank" rel="noopener">' + t("popup.openPota") + "</a>" +
         '<a href="https://www.google.com/maps/dir/?api=1&destination=' +
@@ -1581,8 +1971,12 @@ map.on("click", (e) => {
   popup.setLngLat(e.lngLat).setHTML(parts.join("")).addTo(map);
   keepPopupInView();
   fillParkDetails();
+  fillPlaces();
   fillNfer(e.lngLat.lat, e.lngLat.lng);
 });
+
+// The markers belong to the open popup. Closing it takes them off the map.
+popup.on("close", () => showPlacesOnMap(null));
 
 /* The search index carries the POTA point of every reference. For routing
    that beats the click position - you want to get to the park, not its edge. */
@@ -1637,6 +2031,149 @@ function fillParkDetails() {
     });
   }
 }
+
+/**
+ * The best places inside a park: where a bench, a picnic table or a shelter
+ * stands, ranked by what makes a spot worth carrying a station to.
+ *
+ * The ranking is not computed here. It is precomputed for every park in the
+ * pipeline (compute_places.py) and served as a plain file, which is why the
+ * map can show it without asking Overpass or an elevation service - and why
+ * it still works out in the field, where the file is in the browser cache.
+ *
+ * The model is the one from POTASpotFinder by DA6MAX, weights and all.
+ */
+let placesIndex = {};
+const placesCache = new Map();
+
+// How many of them the popup shows before "all of them".
+const PLACES_IN_POPUP = 3;
+
+/** Whether asking for this park's places is worth a request at all. */
+function hasPlaces(ref) {
+  const entry = placesIndex[ref];
+  return Array.isArray(entry) && entry[0] > 0;
+}
+
+function parkPlaces(ref) {
+  if (!placesCache.has(ref)) {
+    placesCache.set(ref, loadJSON("/data/places/" + encodeURIComponent(ref) + ".json")
+      .catch(() => null));
+  }
+  return placesCache.get(ref);
+}
+
+/** The compass point a place is most open towards, from the eight angles. */
+function bestDirection(angles) {
+  if (!Array.isArray(angles) || angles.length !== 8) return null;
+  let best = 0;
+  for (let i = 1; i < angles.length; i += 1) {
+    if (angles[i] < angles[best]) best = i;
+  }
+  return t("places.dir." + best);
+}
+
+function placeLine(place, rank) {
+  const bits = [];
+  if (Number.isFinite(place.d && place.d.ele)) {
+    bits.push(t("places.ele", { m: place.d.ele }));
+  }
+  const open = bestDirection(place.hz);
+  if (open) bits.push(t("places.open", { dir: open }));
+  if (Number.isFinite(place.d && place.d.park)) {
+    bits.push(t("places.toPark", { m: place.d.park }));
+  }
+  // The route goes to the place, not to the park: knowing that the good bench
+  // is on the far side is only half an answer if the navigation drops you at
+  // the entrance.
+  const route = 'https://www.google.com/maps/dir/?api=1&destination=' +
+    place.y.toFixed(6) + "," + place.x.toFixed(6);
+  return '<div class="place"><button class="jump" data-lat="' + place.y +
+    '" data-lon="' + place.x + '"><i class="rank">' + rank + "</i><span><b>" +
+    esc(t("poi.kind." + place.k)) + "</b>" +
+    (place.n ? " · " + esc(place.n) : "") + '<br><span class="meta">' +
+    esc(bits.join(" · ")) + "</span></span></button>" +
+    '<a class="route" href="' + route + '" target="_blank" rel="noopener" title="' +
+    esc(t("places.route")) + '">↗</a>' +
+    '<i class="score" title="' + esc(t("places.score")) + '">' + place.s + "</i></div>";
+}
+
+function renderPlaces(box, data, all) {
+  const list = all ? data.places : data.places.slice(0, PLACES_IN_POPUP);
+  const rows = list.map((place, i) => placeLine(place, i + 1)).join("");
+  const more = !all && data.places.length > PLACES_IN_POPUP
+    ? '<button class="linkish" data-places-all="' + esc(data.ref) + '">' +
+      t("places.showAll", { count: data.places.length }) + "</button>"
+    : "";
+  box.innerHTML = '<p class="seghead">' + t("places.head") + "</p>" + rows + more +
+    '<p class="meta">' + t("places.hint") + "</p>";
+}
+
+/** Put the places of the open park on the map, numbered like the list. */
+let placesOnMap = null;
+
+function showPlacesOnMap(data) {
+  placesOnMap = data && data.places ? data : null;
+  const source = map.getSource("places");
+  if (!source) return;
+  if (!placesOnMap) {
+    source.setData(emptyFC());
+    return;
+  }
+  source.setData({
+    type: "FeatureCollection",
+    features: data.places.map((place, i) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [place.x, place.y] },
+      properties: { rank: String(i + 1), score: place.s },
+    })),
+  });
+}
+
+function fillPlaces() {
+  const root = popup.getElement();
+  if (!root) return;
+  // Whatever was on the map belonged to the popup before this one.
+  showPlacesOnMap(null);
+  let first = true;
+  for (const box of root.querySelectorAll(".places[data-ref]")) {
+    const ref = box.dataset.ref;
+    const mine = first;
+    first = false;
+    parkPlaces(ref).then((data) => {
+      if (!box.isConnected) return;
+      if (!data || !data.places || !data.places.length) { box.remove(); return; }
+      renderPlaces(box, data, false);
+      if (mine) showPlacesOnMap(data);
+      keepPopupInView();
+    });
+  }
+}
+
+/* Both live inside the popup, so they are delegated on the document like the
+   GPX link is. */
+document.addEventListener("click", (e) => {
+  const all = e.target.closest("[data-places-all]");
+  if (all) {
+    e.preventDefault();
+    const box = all.closest(".places[data-ref]");
+    parkPlaces(all.dataset.placesAll).then((data) => {
+      if (data && box && box.isConnected) {
+        renderPlaces(box, data, true);
+        keepPopupInView();
+      }
+    });
+    return;
+  }
+  const jump = e.target.closest(".place .jump[data-lat]");
+  if (jump) {
+    e.preventDefault();
+    map.flyTo({
+      center: [Number(jump.dataset.lon), Number(jump.dataset.lat)],
+      zoom: Math.max(map.getZoom(), 16),
+    });
+  }
+});
 
 /**
  * "Counts here too" has to mean here, not somewhere in this park.
@@ -1694,7 +2231,7 @@ function prettyDate(raw) {
  * all take GPX - OsmAnd, Garmin and Locus accept it directly. Areas are
  * written as a closed track; GPX has no area type.
  */
-function toGpx(ref, name, geometry) {
+function toGpx(ref, name, geometry, places) {
   const tracks = [];
   const collect = (g) => {
     if (!g) return;
@@ -1717,9 +2254,30 @@ function toGpx(ref, name, geometry) {
     )
     .join("\n");
 
+  // The places as waypoints. GPX 1.1 wants them before the track, and every
+  // handheld shows them without being asked - that is the whole point: the
+  // planning ends up on the device, not in a browser tab.
+  const waypoints = (places || []).map((place, i) => {
+    const facts = [];
+    if (Number.isFinite(place.d && place.d.ele)) facts.push(place.d.ele + " m");
+    if (Number.isFinite(place.d && place.d.park)) {
+      facts.push(t("places.toPark", { m: place.d.park }));
+    }
+    if (Number.isFinite(place.d && place.d.qrm)) {
+      facts.push(t("places.toQrm", { m: place.d.qrm }));
+    }
+    return " <wpt lat=\"" + place.y.toFixed(6) + "\" lon=\"" + place.x.toFixed(6) + "\">\n" +
+      "  <name>" + esc((i + 1) + " " + t("poi.kind." + place.k) + " (" + place.s + ")") +
+      "</name>\n" +
+      (facts.length ? "  <desc>" + esc(facts.join(" · ")) + "</desc>\n" : "") +
+      (Number.isFinite(place.d && place.d.ele) ? "  <ele>" + place.d.ele + "</ele>\n" : "") +
+      " </wpt>";
+  }).join("\n");
+
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<gpx version="1.1" creator="' + esc(location.host) + '" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+    (waypoints ? waypoints + "\n" : "") +
     " <trk>\n  <name>" + esc(ref + " " + name) + "</name>\n" +
     segments +
     "\n </trk>\n</gpx>\n"
@@ -1727,8 +2285,13 @@ function toGpx(ref, name, geometry) {
 }
 
 async function downloadGpx(ref) {
-  const feature = await loadJSON("/data/parks/" + encodeURIComponent(ref) + ".geojson");
-  const text = toGpx(ref, feature.properties.name || "", feature.geometry);
+  // The places are a bonus: a park without them still exports its outline.
+  const [feature, places] = await Promise.all([
+    loadJSON("/data/parks/" + encodeURIComponent(ref) + ".geojson"),
+    hasPlaces(ref) ? parkPlaces(ref) : Promise.resolve(null),
+  ]);
+  const text = toGpx(ref, feature.properties.name || "", feature.geometry,
+                     places && places.places);
   const url = URL.createObjectURL(new Blob([text], { type: "application/gpx+xml" }));
   const a = document.createElement("a");
   a.href = url;
@@ -1939,7 +2502,15 @@ function applyLanguage() {
   el("credits-pois").innerHTML = t("credits.pois", {
     osm: link("https://www.openstreetmap.org/copyright", t("credits.osm")),
   });
+  el("credits-places").innerHTML = t("credits.places", {
+    finder: link("https://github.com/mooxle/POTASpotFinder", "POTASpotFinder"),
+  });
+  el("credits-raster").innerHTML = t("credits.raster", {
+    osm: link("https://www.openstreetmap.org", t("credits.osm")),
+    otm: link("https://opentopomap.org", "OpenTopoMap"),
+  });
   renderPrograms();
+  showBaseHint();
   showHuntedState();
   if (!state.call) el("callhint").textContent = t("call.hint");
   if (spotsRaw) renderSpots();
@@ -2007,6 +2578,41 @@ function syncControls() {
   for (const b of el("basemaps").children) {
     b.classList.toggle("on", b.dataset.base === state.base);
   }
+  showSaturation();
+  showPoiSliders();
+  showBaseHint();
+}
+
+/* Worth the space for a foreign base - it says where the tiles come from and
+   why that one needs a network - and for pastel, which is the other way
+   round: no network, but only as far as our own extract reaches. */
+function showBaseHint() {
+  const hint = el("base-hint");
+  if (!hint) return;
+  hint.hidden = !RASTER_BASES[state.base] && state.base !== "pastel";
+  if (!hint.hidden) hint.textContent = t("look.hint." + state.base);
+}
+
+/** Both POI sliders and their readings. */
+function showPoiSliders() {
+  const pairs = [
+    ["poi-zoom", "poi-zoom-value", state.poiZoom, t("poi.zoomValue", { zoom: state.poiZoom })],
+    ["poi-size", "poi-size-value", state.poiSize, t("poi.sizeValue", { percent: state.poiSize })],
+  ];
+  for (const [id, outId, value, text] of pairs) {
+    const slider = el(id);
+    const out = el(outId);
+    if (slider) slider.value = String(value);
+    if (out) out.textContent = text;
+  }
+}
+
+/** Slider and reading, for whichever setting the base on screen uses. */
+function showSaturation() {
+  const slider = el("saturation");
+  const out = el("saturation-value");
+  if (slider) slider.value = String(currentSaturation());
+  if (out) out.textContent = t("look.satValue", { percent: currentSaturation() });
 }
 
 syncControls();
@@ -2020,12 +2626,48 @@ el("programs").addEventListener("change", (e) => {
   saveSettings();
 });
 
+/* A raster base only changes one paint property, so it follows the handle
+   live. A vector base has to be built again - eighty odd colours across
+   sixty layers - and doing that on every step of the drag would stutter, so
+   it lands shortly after the handle comes to rest. */
+let saturationTimer = null;
+
+el("saturation").addEventListener("input", (e) => {
+  const value = Number(e.target.value);
+  if (!Number.isFinite(value)) return;
+  state.saturation[saturationKey()] = clampPercent(value);
+  showSaturation();
+  if (map.getLayer("raster")) {
+    map.setPaintProperty("raster", "raster-saturation", rasterSaturation());
+    return;
+  }
+  clearTimeout(saturationTimer);
+  saturationTimer = setTimeout(restyle, 200);
+});
+
+el("saturation").addEventListener("change", () => saveSettings());
+
+/* Both go straight onto the live layers, so they follow the handle. */
+for (const [id, key, range] of [["poi-zoom", "poiZoom", POI_ZOOM],
+                                ["poi-size", "poiSize", POI_SIZE]]) {
+  el(id).addEventListener("input", (e) => {
+    const value = Number(e.target.value);
+    if (!Number.isFinite(value)) return;
+    state[key] = clampRange(value, range);
+    showPoiSliders();
+    refreshPois();
+  });
+  el(id).addEventListener("change", () => saveSettings());
+}
+
 el("basemaps").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   for (const b of el("basemaps").children) b.classList.toggle("on", b === btn);
   state.base = btn.dataset.base;
   applyTheme();
+  showSaturation();
+  showBaseHint();
   restyle();
   saveSettings();
 });
@@ -2180,6 +2822,11 @@ function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESCAPES[c]);
 }
 
+/* Encode a path with slashes kept as separators (SOTA refs are "DL/BW-123"). */
+function encodePath(s) {
+  return String(s == null ? "" : s).split("/").map(encodeURIComponent).join("/");
+}
+
 function fmtFreq(khz) {
   const n = parseFloat(khz);
   return Number.isFinite(n) ? (n / 1000).toFixed(3) + " MHz" : String(khz == null ? "" : khz);
@@ -2330,8 +2977,12 @@ function prefetchAround() {
   candidateList.sort((a, b2) => a[0] - b2[0]);
 
   const urls = [];
+  // Only our own archives belong in here. Fetching foreign tiles that nobody
+  // is looking at yet is exactly what the OSM tile policy calls bulk
+  // downloading, and the raster bases are somebody else's servers.
+  const layers = RASTER_BASES[state.base] ? ["parks"] : ["basemap", "parks"];
   for (const [, x, y] of candidateList) {
-    for (const layer of ["basemap", "parks"]) {
+    for (const layer of layers) {
       const u = `/t/${layer}/${z}/${x}/${y}.mvt`;
       if (!prefetched.has(u)) {
         prefetched.add(u);
@@ -2431,6 +3082,11 @@ map.on("moveend", stopFrameCheck);
  * Collect the tile URLs for the visible area, from the current zoom level down
  * three levels. Deeper gets out of hand quickly: every level multiplies the
  * number of tiles by four.
+ *
+ * Our own archives only. The outdoor base is not in here on purpose - putting
+ * a stock of someone else's tiles aside is what their terms rule out. Our own
+ * base is saved even while the outdoor one is on: whoever ends up without a
+ * network can switch over and still has a map.
  */
 function offlineUrls() {
   const urls = [];
@@ -2468,10 +3124,6 @@ function startOffline() {
     return;
   }
 
-  navigator.serviceWorker.register("/sw.js").catch((err) => {
-    console.warn("service worker:", err);
-  });
-
   navigator.serviceWorker.addEventListener("message", (e) => {
     const m = e.data || {};
     if (m.kind !== "progress") return;
@@ -2491,10 +3143,75 @@ function startOffline() {
       hint.textContent = t("offline.nothing");
       return;
     }
+    // A browser short of room throws out whatever it likes. Asking here and
+    // not on the first visit is deliberate: this click is the moment somebody
+    // says the map matters to them, and a prompt has a reason.
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => { /* denied is not a fault */ });
+    }
     button.disabled = true;
     button.textContent = t("offline.saving");
     hint.textContent = t("offline.saving");
     reg.active.postMessage({ kind: "prefetch", urls });
+  });
+}
+
+/* --------------------------------------------------- Storage on the device */
+
+/* The app itself (pota-shell) is not in here: it is the program, not map
+   data, and without it there is nothing left to clear anything from. */
+const MAP_CACHES = ["pota-tiles", "pota-raster", "pota-data"];
+
+/** Readable rather than exact - nobody needs the byte. */
+function humanSize(bytes) {
+  const mb = (bytes || 0) / 1048576;
+  if (mb < 1) return "< 1 MB";
+  if (mb < 1024) return `${Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+async function showStorageSize() {
+  const line = el("storage-size");
+  if (!line) return;
+  if (!navigator.storage || !navigator.storage.estimate) {
+    line.textContent = t("storage.unknown");
+    return;
+  }
+  try {
+    const { usage } = await navigator.storage.estimate();
+    line.textContent = t("storage.size", { size: humanSize(usage) });
+  } catch (err) {
+    line.textContent = t("storage.unknown");
+  }
+}
+
+function startStorage() {
+  const button = el("storage-btn");
+  if (!button) return;
+  if (!window.caches) {
+    button.disabled = true;
+    el("storage-size").textContent = t("storage.unknown");
+    return;
+  }
+  showStorageSize();
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = t("storage.clearing");
+    try {
+      const names = await caches.keys();
+      await Promise.all(
+        names
+          .filter((n) => MAP_CACHES.some((prefix) => n.startsWith(prefix)))
+          .map((n) => caches.delete(n)),
+      );
+    } catch (err) {
+      console.warn("storage:", err);
+    }
+    // MapLibre keeps its own copies in memory, so emptying the stores alone
+    // would not fetch a single tile again. The position is in the hash: the
+    // map comes back where it was, with everything freshly loaded.
+    location.reload();
   });
 }
 
@@ -2524,6 +3241,7 @@ map.on("load", async () => {
   setInterval(loadSpots, 60000);
   startPrefetch();
   startOffline();
+  startStorage();
   // The report panel is optional and most installations will not have it, so
   // ask the server first and only then fetch the module. It is built as its
   // own file; the hashed name is in a meta tag, which keeps this out of the

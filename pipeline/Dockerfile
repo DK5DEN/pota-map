@@ -31,7 +31,9 @@ RUN curl -fsSL "https://github.com/aptible/supercronic/releases/download/${SUPER
 
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir requests==2.32.3 shapely==2.0.6
+# pillow only decodes the terrain tiles (see dem.py); numpy comes with
+# shapely and does the arithmetic on them.
+RUN pip install --no-cache-dir requests==2.32.3 shapely==2.0.6 pillow==11.0.0
 
 WORKDIR /pipeline
 COPY . /pipeline

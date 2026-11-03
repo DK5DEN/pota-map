@@ -12,6 +12,7 @@ nwr/railway=station,halt,tram_stop
 
 # staying there
 n/amenity=bench
+nwr/leisure=lounger
 nwr/amenity=shelter,bbq
 nwr/leisure=picnic_table,firepit
 nwr/tourism=picnic_site,alpine_hut,wilderness_hut,camp_site,caravan_site
@@ -22,7 +23,7 @@ nwr/man_made=water_tap
 nwr/shop=supermarket,convenience,bakery
 
 # where to put the antenna, where to look
-nwr/tourism=viewpoint,information
+nwr/tourism=viewpoint,information,attraction
 nwr/man_made=tower
 nwr/natural=peak,saddle
 
@@ -33,6 +34,7 @@ nwr/building=castle
 nwr/man_made=lighthouse,windmill,watermill
 
 # where the noise comes from
+w/highway=motorway,trunk,primary,secondary,tertiary,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link
 w/power=line,minor_line
 n/power=tower
 nwr/power=substation

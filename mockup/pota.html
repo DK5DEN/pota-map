@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>POTA-Karte, Parkgrenzen und Live-Spots (Mockup)</title>
+<meta name="description" content="Parkgrenzen von POTA in DE, AT, CH, LI, CZ, DK und LU, dazu SOTA-Gipfel und Live-Spots. Zeigt, in welchem Park du stehst, und geht auch ohne Netz.">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex">
+<link rel="icon" href="https://afu.tools/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://afu.tools/style.css?v=20260910g">
+<link rel="stylesheet" href="https://afu.tools/vendor/leaflet/leaflet.css">
+<meta name="theme-color" content="#0a0e1f">
+<link rel="stylesheet" href="pota.css">
+</head>
+<body>
+
+<a class="skip" href="#inhalt">Zum Inhalt</a>
+<header class="topbar" id="kopf">
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16h10l2 3.6 2-3.6h10"/><path d="M9.5 10.5a9 9 0 0 1 13 0"/><path d="M9.5 21.5a9 9 0 0 0 13 0"/><path d="M6 6.5a14 14 0 0 1 20 0" opacity=".5"/><path d="M6 25.5a14 14 0 0 0 20 0" opacity=".5"/></svg>
+      <span>afu<span class="muted">.tools</span></span>
+    </a>
+    <nav aria-label="Bereiche" id="hauptnav">
+      <div class="schnellzugriff">
+        <p>Am häufigsten gebraucht</p>
+        <a href="/termine"><span class="ico" aria-hidden="true">📅</span>Prüfungstermine</a>
+        <a href="/bandplan"><span class="ico" aria-hidden="true">📶</span>Bandplan</a>
+        <a href="/relais"><span class="ico" aria-hidden="true">🗼</span>Relais</a>
+        <a href="/rechner"><span class="ico" aria-hidden="true">🧮</span>Rechner</a>
+        <a href="/lexikon"><span class="ico" aria-hidden="true">📖</span>Lexikon</a>
+      </div>
+      <details class="untermenu">
+        <summary>Werkzeuge</summary>
+        <div class="untermenu-inhalt">
+          <a href="https://www.funkpate.de"><span class="ico" aria-hidden="true">🎓</span>
+            <span><strong>Funkpate</strong><em>Lernplattform für die Prüfung</em></span></a>
+          <a href="/pota" aria-current="page"><span class="ico" aria-hidden="true">🌲</span>
+            <span><strong>POTA-Karte</strong><em>Parkgrenzen, SOTA-Gipfel, Live-Spots</em></span></a>
+          <a href="/programmer/yaesu"><span class="ico" aria-hidden="true">🎛️</span>
+            <span><strong>Yaesu-Programmer</strong><em>Speicherkanäle im Browser</em></span></a>
+          <a href="https://antennasim.afu.tools"><span class="ico" aria-hidden="true">📐</span>
+            <span><strong>Antennensimulator</strong><em>Antennen rechnen vor dem Bauen</em></span></a>
+          <a href="/vna"><span class="ico" aria-hidden="true">📡</span>
+            <span><strong>Antenne vermessen</strong><em>LiteVNA anstecken: Resonanz, SWR, Güte</em></span></a>
+          <a href="/oberwellen"><span class="ico" aria-hidden="true">📉</span>
+            <span><strong>Oberwellen messen</strong><em>tinySA anstecken: sendet das Gerät sauber?</em></span></a>
+        </div>
+      </details>
+      <details class="untermenu">
+        <summary>Funkbetrieb</summary>
+        <div class="untermenu-inhalt zweispaltig">
+          <a href="/bandplan"><span class="ico" aria-hidden="true">📶</span>
+            <span><strong>Bandplan</strong><em>Bänder, Leistung je Klasse, Anlaufstellen</em></span></a>
+          <a href="/relais"><span class="ico" aria-hidden="true">🗼</span>
+            <span><strong>Relais</strong><em>Relais im Umkreis, Sichtlinie, CSV zum Mitnehmen</em></span></a>
+          <a href="/portabel"><span class="ico" aria-hidden="true">🎒</span>
+            <span><strong>Portabel</strong><em>POTA, SOTA, Sonnenzeiten, Bedingungen</em></span></a>
+          <a href="/dx"><span class="ico" aria-hidden="true">🌐</span>
+            <span><strong>DX-Kalender</strong><em>Angekündigte DX-Aktivitäten mit Kalender-Abo</em></span></a>
+          <a href="/cluster"><span class="ico" aria-hidden="true">📡</span>
+            <span><strong>DX-Cluster</strong><em>Wer ist gerade in der Luft, mit Seltenheit und Peilung</em></span></a>
+          <a href="/contest"><span class="ico" aria-hidden="true">🏆</span>
+            <span><strong>Contest</strong><em>Kalender und Log-Auswertung</em></span></a>
+          <a href="/baken"><span class="ico" aria-hidden="true">⏱️</span>
+            <span><strong>Bakenuhr</strong><em>Welche IBP-Bake gerade sendet, und woher</em></span></a>
+          <a href="/satelliten"><span class="ico" aria-hidden="true">🛰️</span>
+            <span><strong>Satelliten</strong><em>Überflüge, Doppler und Antennenrichtung</em></span></a>
+          <a href="/qo100"><span class="ico" aria-hidden="true">🔭</span>
+            <span><strong>QO-100</strong><em>Transponderplan und Ablage umrechnen</em></span></a>
+          <a href="/notfunk"><span class="ico" aria-hidden="true">🚨</span>
+            <span><strong>Notfunk</strong><em>Sammelfrequenzen, Vorbereitung, Grenzen</em></span></a>
+        </div>
+      </details>
+      <details class="untermenu">
+        <summary>Nachschlagen</summary>
+        <div class="untermenu-inhalt zweispaltig">
+          <a href="/termine"><span class="ico" aria-hidden="true">📅</span>
+            <span><strong>Prüfungstermine</strong><em>Termine der BNetzA mit Umkreissuche</em></span></a>
+          <a href="/lexikon"><span class="ico" aria-hidden="true">📖</span>
+            <span><strong>Lexikon</strong><em>Q-Gruppen, Abkürzungen, Begriffe</em></span></a>
+          <a href="/ausland"><span class="ico" aria-hidden="true">🌍</span>
+            <span><strong>Ausland</strong><em>Wo gilt welche deutsche Klasse</em></span></a>
+          <a href="/rufzeichen"><span class="ico" aria-hidden="true">🔎</span>
+            <span><strong>Rufzeichen</strong><em>Rufzeichen, DOK und freie Rufzeichen</em></span></a>
+          <a href="/praefix"><span class="ico" aria-hidden="true">🧭</span>
+            <span><strong>Präfix und DXCC</strong><em>Welches Land, welche Zone, welche Richtung</em></span></a>
+          <a href="/ov-karte"><span class="ico" aria-hidden="true">🗺️</span>
+            <span><strong>OV-Karte</strong><em>Welcher Ortsverband liegt hier am nächsten</em></span></a>
+          <a href="/projekte"><span class="ico" aria-hidden="true">🔧</span>
+            <span><strong>Anleitungen</strong><em>Selbstbau, Schritt für Schritt aufgeschrieben</em></span></a>
+          <a href="/quellen"><span class="ico" aria-hidden="true">📚</span>
+            <span><strong>Quellen</strong><em>Woher die Daten kommen und wie alt sie sind</em></span></a>
+          <a href="/feeds"><span class="ico" aria-hidden="true">📬</span>
+            <span><strong>Feeds</strong><em>Termine, DX und Contest als Kalender-Abo oder RSS</em></span></a>
+          <a href="/api"><span class="ico" aria-hidden="true">⚙️</span>
+            <span><strong>API</strong><em>Schnittstelle für eigene Programme</em></span></a>
+        </div>
+      </details>
+      <details class="untermenu">
+        <summary>Rechnen</summary>
+        <div class="untermenu-inhalt">
+          <a href="/rechner"><span class="ico" aria-hidden="true">🧮</span>
+            <span><strong>Rechner</strong><em>Locator, Antenne, Kabel, SWR, Werkstatt</em></span></a>
+          <a href="/bemfv"><span class="ico" aria-hidden="true">📋</span>
+            <span><strong>BEMFV</strong><em>Sicherheitsabstand und Anzeige vorbereiten</em></span></a>
+          <a href="/log"><span class="ico" aria-hidden="true">📊</span>
+            <span><strong>Log auswerten</strong><em>ADIF ansehen, zählen, nach Cabrillo</em></span></a>
+        </div>
+      </details>
+      <a href="/einstieg">Einstieg</a>
+      <details class="untermenu">
+        <summary>Mehr</summary>
+        <div class="untermenu-inhalt">
+          <a href="/"><span class="ico" aria-hidden="true">🏠</span>
+            <span><strong>Startseite</strong><em>Alles auf einen Blick</em></span></a>
+          <a href="/einstieg"><span class="ico" aria-hidden="true">🎯</span>
+            <span><strong>Weg zum Rufzeichen</strong><em>Klassen, Prüfung, Kosten</em></span></a>
+          <a href="/#b37"><span class="ico" aria-hidden="true">📡</span>
+            <span><strong>OV Haßberge, B37</strong><em>Ortsverband, Relais, OV-Abend</em></span></a>
+          <a href="/melden"><span class="ico" aria-hidden="true">🐞</span>
+            <span><strong>Melden</strong><em>Fehler, Idee oder Frage, mit Antwort</em></span></a>
+          <a href="https://www.bravo37.de"><span class="ico" aria-hidden="true">🔗</span>
+            <span><strong>bravo37.de</strong><em>Seite des Ortsverbands</em></span></a>
+          <a href="/impressum"><span class="ico" aria-hidden="true">📄</span>
+            <span><strong>Impressum</strong></span></a>
+          <a href="/datenschutz"><span class="ico" aria-hidden="true">🔒</span>
+            <span><strong>Datenschutz</strong></span></a>
+        </div>
+      </details>
+    </nav>
+    <div class="bar-actions">
+      <button class="search-open" type="button" data-search aria-haspopup="dialog"
+              aria-label="Suchen">
+        <span aria-hidden="true">🔍</span>
+        <span class="nur-breit">Suchen <kbd>/</kbd></span>
+      </button>
+      <button class="melden-open" type="button" data-melden aria-haspopup="dialog"
+              aria-label="Fehler, Idee oder Frage melden">
+        <span aria-hidden="true">🐞</span>
+        <span class="nur-breit">Melden</span>
+      </button>
+      <button class="konto-open" type="button" id="konto-knopf" aria-haspopup="menu" aria-expanded="false"
+              aria-label="Anmelden">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+        <span class="nur-breit" id="konto-text">Anmelden</span>
+      </button>
+      <div class="konto-menu" id="konto-menu" role="menu" hidden>
+        <p class="konto-kopf"><strong id="konto-call">DL1ABC</strong><span class="muted small">angemeldet</span></p>
+        <a role="menuitem" href="#" onclick="return false">Meine Einstellungen</a>
+        <a role="menuitem" href="#" onclick="return false">Meine Aktivierungen</a>
+        <button role="menuitem" type="button" id="konto-abmelden">Abmelden</button>
+      </div>
+      <button class="menu-open" type="button" id="menu-knopf" hidden
+              aria-expanded="false" aria-controls="hauptnav" aria-label="Menü">
+        <span aria-hidden="true">☰</span>
+      </button>
+    </div>
+  </div>
+</header>
+<main id="inhalt">
+<!-- Head of the page, as on every other afu.tools page. On phones it is
+     gone: there the map owns the screen and the text waits below it. -->
+<div class="wrap page-head pota-kopf">
+  <p class="crumbs"><a href="/">Start</a> › <a href="/portabel">Portabel</a> › POTA-Karte</p>
+  <h1>POTA-Karte</h1>
+  <p class="lead">Parkgrenzen in DE, AT, CH, LI, CZ, DK und LU, dazu SOTA-Gipfel und Live-Spots.
+    Sagt dir, in welchem Park du stehst, und geht ohne Netz, wenn du den Ausschnitt vorher sicherst.</p>
+</div>
+
+<section class="wrap pota-app" id="pota-app">
+
+  <!-- Settings. On wide screens a column next to the map, on phones a sheet
+       that slides up over it. Same markup, only CSS decides. -->
+  <aside class="pota-panel" id="panel" aria-label="Einstellungen">
+    <div class="pota-panel-kopf">
+      <div class="pota-tabs" role="tablist" aria-label="Bereiche">
+        <button class="pota-tab" role="tab" data-tab="karte" aria-selected="true">Karte</button>
+        <button class="pota-tab" role="tab" data-tab="spots" aria-selected="false">Spots <span class="pota-zaehler" id="spot-zaehler">6</span></button>
+        <button class="pota-tab" role="tab" data-tab="ich" aria-selected="false">Ich</button>
+        <button class="pota-tab" role="tab" data-tab="unterwegs" aria-selected="false">Unterwegs</button>
+      </div>
+      <button class="pota-schliessen" type="button" id="panel-zu" aria-label="Einstellungen schließen">✕</button>
+    </div>
+
+    <div class="pota-panel-inhalt">
+
+    <!-- ===================================================== Karte -->
+    <div class="pota-seite" data-tab="karte">
+      <section>
+        <h3>Programme</h3>
+        <div class="pota-checks" id="programme">
+          <label class="pota-check"><input type="checkbox" data-prog="DE" checked> Deutschland</label>
+          <label class="pota-check"><input type="checkbox" data-prog="AT"> Österreich</label>
+          <label class="pota-check"><input type="checkbox" data-prog="CH"> Schweiz</label>
+          <label class="pota-check"><input type="checkbox" data-prog="LI"> Liechtenstein</label>
+          <label class="pota-check"><input type="checkbox" data-prog="CZ"> Tschechien</label>
+          <label class="pota-check"><input type="checkbox" data-prog="DK"> Dänemark</label>
+          <label class="pota-check"><input type="checkbox" data-prog="LU"> Luxemburg</label>
+        </div>
+        <p class="field-hint">Beim ersten Aufruf ist nur DE an. Die Auswahl merkt sich der Browser.</p>
+      </section>
+
+      <section>
+        <h3>Anzeige</h3>
+        <label class="pota-check"><input type="checkbox" id="opt-spots" checked> Live-Spots</label>
+        <label class="pota-check"><input type="checkbox" id="opt-sota" checked> SOTA-Gipfel</label>
+        <p class="field-hint" id="sota-hint">Folgt der Länderauswahl oben. Ab Zoom 8 alle Gipfel, darunter nur die 10-Punkte-Gipfel.</p>
+        <label class="pota-check"><input type="checkbox" id="opt-never" checked> Nie aktivierte hervorheben</label>
+        <label class="pota-check"><input type="checkbox" id="opt-points" checked> Parks ohne Fläche als Punkt</label>
+        <label class="pota-check"><input type="checkbox" id="opt-plans" checked> Angekündigte Aktivierungen</label>
+        <label class="pota-check"><input type="checkbox" id="opt-nfer"> Nur Parks, die sich überlappen</label>
+        <p class="field-hint">Wer im Überschneidungsbereich zweier Parks steht, aktiviert mit einem Aufbau mehrere Referenzen.</p>
+      </section>
+
+      <section>
+        <h3>Darstellung</h3>
+        <div class="field">
+          <label for="sprache">Sprache</label>
+          <select id="sprache">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <p class="pota-seghead">Basiskarte</p>
+        <div class="filter-schalter pota-seg" id="basiskarten">
+          <button class="btn-sm" type="button" data-base="osm" aria-pressed="true">Hell</button>
+          <button class="btn-sm" type="button" data-base="pastel" aria-pressed="false">Pastell</button>
+          <button class="btn-sm" type="button" data-base="dark" aria-pressed="false">Dunkel</button>
+          <button class="btn-sm" type="button" data-base="topo" aria-pressed="false">Topo</button>
+        </div>
+        <p class="field-hint" id="base-hint">Die Standardkarte von OpenStreetMap, mit Wegen, Gebäuden und Flurnamen. Braucht Netz. Wer offline unterwegs ist, nimmt „Dunkel“: das ist unsere eigene Karte, die sich sichern lässt.</p>
+        <p class="pota-seghead">Farbe der Hintergrundkarte</p>
+        <div class="pota-regler">
+          <input type="range" id="saettigung" min="0" max="100" step="5" value="55" aria-label="Farbe der Hintergrundkarte">
+          <output for="saettigung" id="saettigung-wert">55 %</output>
+        </div>
+        <p class="field-hint">Die Karte darunter ist der Grund, nicht das Thema. Ganz links wird sie grau, ganz rechts zeigt sie sich, wie sie gemeint ist.</p>
+        <p class="pota-seghead">Schärfe</p>
+        <div class="filter-schalter pota-seg" id="schaerfe">
+          <button class="btn-sm" type="button" data-q="auto" aria-pressed="true">Auto</button>
+          <button class="btn-sm" type="button" data-q="sharp" aria-pressed="false">Scharf</button>
+          <button class="btn-sm" type="button" data-q="smooth" aria-pressed="false">Flüssig</button>
+        </div>
+        <p class="field-hint">Auf hochauflösenden Bildschirmen zeichnet die Karte je Bild ein Vielfaches an Pixeln. „Auto“ senkt die Schärfe, wenn es ruckelt.</p>
+      </section>
+
+      <section>
+        <h3>Legende</h3>
+        <ul class="pota-legende">
+          <li><i class="sw" style="--c:#e02424"></i>Park</li>
+          <li><i class="sw" style="--c:#9333ea"></i>noch nie aktiviert</li>
+          <li><i class="sw" id="legende-eigen" style="--c:#00a86b"></i>von mir aktiviert</li>
+          <li><i class="sw" style="--c:#0d9488"></i>von mir gejagt</li>
+          <li><i class="sw line" style="--c:#1d4ed8"></i>Wanderweg (Trail)</li>
+          <li><i class="sw dot" style="--c:#0ea5e9"></i>Park ohne Fläche</li>
+          <li><i class="sw dot" style="--c:#f59e0b"></i>Live-Spot</li>
+          <li><i class="sw dot" style="--c:#8b5cf6"></i>angekündigte Aktivierung</li>
+          <li><i class="sw dot sota" style="--c:#6DA536"></i>SOTA-Gipfel (Farbe = Punkte)</li>
+        </ul>
+        <ul class="pota-legende" id="legende-pois" hidden>
+          <li><i class="sw dot" style="--c:#0369a1"></i>Anfahrt</li>
+          <li><i class="sw dot" style="--c:#15803d"></i>Aufenthalt</li>
+          <li><i class="sw dot" style="--c:#b45309"></i>Versorgung</li>
+          <li><i class="sw dot" style="--c:#7c3aed"></i>Aussicht</li>
+          <li><i class="sw dot" style="--c:#0f766e"></i>Orientierung</li>
+          <li><i class="sw dot" style="--c:#be123c"></i>Ziele</li>
+          <li><i class="sw line" style="--c:#dc2626"></i>Störquellen</li>
+        </ul>
+      </section>
+    </div>
+
+    <!-- ===================================================== Spots -->
+    <div class="pota-seite" data-tab="spots" hidden>
+      <section>
+        <h3>Live-Spots <span class="pota-zaehler" id="spot-stand">6 Spots</span></h3>
+        <div class="pota-filterzeile">
+          <details class="pota-dropdown" id="spot-band">
+            <summary>alle Bänder</summary>
+            <div class="pota-dropdown-menu">
+              <label class="pota-check"><input type="checkbox" value="160m"> 160 m</label>
+              <label class="pota-check"><input type="checkbox" value="80m"> 80 m</label>
+              <label class="pota-check"><input type="checkbox" value="60m"> 60 m</label>
+              <label class="pota-check"><input type="checkbox" value="40m"> 40 m</label>
+              <label class="pota-check"><input type="checkbox" value="30m"> 30 m</label>
+              <label class="pota-check"><input type="checkbox" value="20m"> 20 m</label>
+              <label class="pota-check"><input type="checkbox" value="17m"> 17 m</label>
+              <label class="pota-check"><input type="checkbox" value="15m"> 15 m</label>
+              <label class="pota-check"><input type="checkbox" value="12m"> 12 m</label>
+              <label class="pota-check"><input type="checkbox" value="10m"> 10 m</label>
+              <label class="pota-check"><input type="checkbox" value="6m"> 6 m</label>
+              <label class="pota-check"><input type="checkbox" value="2m"> 2 m</label>
+              <label class="pota-check"><input type="checkbox" value="70cm"> 70 cm</label>
+            </div>
+          </details>
+          <select id="spot-mode" aria-label="Betriebsart">
+            <option value="">alle Arten</option>
+            <option value="CW">CW</option>
+            <option value="SSB">Fone</option>
+            <option value="DIGI">Digital</option>
+          </select>
+          <select id="spot-sort" aria-label="Sortierung">
+            <option value="age">neueste zuerst</option>
+            <option value="freq">nach Frequenz</option>
+          </select>
+        </div>
+        <div class="pota-filterzeile">
+          <label class="pota-check"><input type="checkbox" id="spot-fresh"> nur frische (15 min)</label>
+          <label class="pota-check"><input type="checkbox" id="spot-qrt"> QRT ausblenden</label>
+          <label class="pota-check"><input type="checkbox" id="spot-hunted"> gejagte ausblenden</label>
+        </div>
+        <ol class="pota-spotliste" id="spotliste"></ol>
+        <p class="field-hint">Das Plus merkt sich den Park als gejagt.</p>
+      </section>
+    </div>
+
+    <!-- ===================================================== Ich -->
+    <div class="pota-seite" data-tab="ich" hidden>
+      <!-- Angemeldet kommt das Rufzeichen aus dem Konto, sonst tippt man es
+           hier ein. Beides derselbe Kasten, damit die Karte nicht zwei Orte
+           für dieselbe Angabe hat. -->
+      <section>
+        <h3>Mein Rufzeichen</h3>
+        <div class="pota-konto" id="konto-zeile" hidden>
+          <span class="pota-konto-call" id="konto-call-anzeige">DL1ABC</span>
+          <span class="field-hint">aus deinen <a href="#" onclick="return false">Einstellungen</a></span>
+          <input id="callfarbe-konto" type="color" value="#00a86b" aria-label="Farbe für eigene Aktivierungen">
+        </div>
+        <div class="pota-callzeile" id="call-zeile">
+          <input id="call" type="text" placeholder="DL1XXX" maxlength="12" autocomplete="off" spellcheck="false" aria-label="Rufzeichen">
+          <input id="callfarbe" type="color" value="#00a86b" aria-label="Farbe für eigene Aktivierungen">
+        </div>
+        <p class="field-hint" id="call-hint">Färbt die Parks ein, die du schon aktiviert hast. <a href="#" id="call-anmelden">Anmelden</a>, dann kommt es aus deinem Konto.</p>
+        <label class="pota-check"><input type="checkbox" id="opt-todo"> Meine erledigten ausblenden</label>
+      </section>
+      <section>
+        <h3>Gejagte Parks</h3>
+        <div class="pota-callzeile">
+          <label class="btn-sm pota-datei" for="hunted-file">hunter_parks.csv laden</label>
+          <input id="hunted-file" type="file" accept=".csv,text/csv,text/plain" hidden>
+          <button id="hunted-clear" class="btn-sm" type="button" title="Liste vergessen" hidden>✕</button>
+        </div>
+        <p class="field-hint" id="hunted-konto" hidden>Angemeldet als DL1ABC: die Liste hängt am Konto und ist auf jedem Gerät dieselbe. Eine hochgeladene Datei ergänzt sie.</p>
+        <p class="field-hint" id="hunted-hint">Noch nichts geladen. Die Datei holst du dir bei pota.app unter „My Stats“ als hunter_parks.csv. Sie bleibt im Browser, nichts davon geht zu uns.</p>
+        <label class="pota-check"><input type="checkbox" id="opt-hide-hunted"> Gejagte ausblenden</label>
+      </section>
+    </div>
+
+    <!-- ===================================================== Unterwegs -->
+    <div class="pota-seite" data-tab="unterwegs" hidden>
+      <section>
+        <h3>Wo stehe ich?</h3>
+        <label class="pota-check"><input type="checkbox" id="opt-track"> Live-Tracking</label>
+        <p class="field-hint" id="track-hint">Aus. Der Standort wird nur auf Knopfdruck geprüft (Knopf auf der Karte).</p>
+      </section>
+      <section>
+        <h3>Was drumherum steht</h3>
+        <label class="pota-check"><input type="checkbox" data-poi="access"> Anfahrt: Parkplätze, Haltestellen</label>
+        <label class="pota-check"><input type="checkbox" data-poi="comfort"> Aufenthalt: Bänke, Hütten, Picknick, Zeltplätze</label>
+        <label class="pota-check"><input type="checkbox" data-poi="supply"> Versorgung: Toiletten, Trinkwasser, Einkehr</label>
+        <label class="pota-check"><input type="checkbox" data-poi="view"> Aussicht: Aussichtspunkte, Türme, Gipfel</label>
+        <label class="pota-check"><input type="checkbox" data-poi="orientation"> Orientierung: Wegweiser, Infotafeln</label>
+        <label class="pota-check"><input type="checkbox" data-poi="target"> Ziele: Bunker, Burgen, Leuchttürme, Mühlen</label>
+        <label class="pota-check"><input type="checkbox" data-poi="qrm"> Störquellen: Hochspannung, Bahnstrom</label>
+        <p class="field-hint">Aus OpenStreetMap, ab Zoomstufe 13. Nichts davon ist geprüft: eine Bank kann seit Jahren weg sein, ein Parkplatz privat.</p>
+        <p class="pota-seghead">Symbole statt Punkte ab Zoom</p>
+        <div class="pota-regler">
+          <input type="range" id="poi-zoom" min="13" max="18" step="1" value="15" aria-label="Symbole statt Punkte ab Zoom">
+          <output for="poi-zoom" id="poi-zoom-wert">Zoom 15</output>
+        </div>
+        <p class="field-hint">Weit draußen sind die Punkte übersichtlicher, von Nahem sagt das Symbol, was einen erwartet.</p>
+        <p class="pota-seghead">Größe der Symbole</p>
+        <div class="pota-regler">
+          <input type="range" id="poi-size" min="60" max="200" step="10" value="100" aria-label="Größe der Symbole">
+          <output for="poi-size" id="poi-size-wert">100 %</output>
+        </div>
+      </section>
+      <section>
+        <h3>Offline</h3>
+        <button class="btn-sm pota-breit" type="button" id="offline-btn">Diesen Ausschnitt offline sichern</button>
+        <p class="field-hint" id="offline-hint">Parks haben oft keinen Empfang. Sichert die Karte des sichtbaren Bereichs bis drei Zoomstufen tiefer.</p>
+      </section>
+      <section>
+        <h3>Karten-Speicher</h3>
+        <p class="field-hint" id="storage-size">Auf diesem Gerät belegt: 38,4 MB</p>
+        <button class="btn-sm pota-breit" type="button" id="storage-btn">Karten-Speicher leeren</button>
+        <p class="field-hint">Löscht alle gespeicherten Kacheln und Daten; die Karte lädt danach alles neu.</p>
+      </section>
+    </div>
+
+    </div><!-- /.pota-panel-inhalt -->
+
+    <!-- Credits and the data stamp. Present on every tab, folded, never
+         behind a choice. Naming the sources is a condition of use. -->
+    <footer class="pota-credits">
+      <details>
+        <summary>Quellen und Rechte · Datenstand 06.09.2026</summary>
+        <p>2585 Parks, davon 2424 mit Fläche. Spots alle 45 Sekunden von api.pota.app.</p>
+        <p>Flächen und Wegverläufe: © <a href="https://pota-map.info">pota-map.info</a> (DK5UR), MIT-Lizenz, mit freundlicher Genehmigung.</p>
+        <p>Referenzen und Spots: <a href="https://pota.app">api.pota.app</a>. Diese Seite gehört nicht zu POTA und wird nicht von POTA betrieben.</p>
+        <p>Gipfel: <a href="https://www.sota.org.uk">SOTA</a>. Basiskarte: <a href="https://protomaps.com">Protomaps</a> aus OpenStreetMap-Daten (ODbL).</p>
+        <p>Punkte unterwegs: <a href="https://www.openstreetmap.org">OpenStreetMap</a>-Mitwirkende, ODbL.</p>
+        <p>Beste Plätze im Park: eigene Berechnung aus OpenStreetMap-Daten, Bewertungsmodell nach <a href="https://github.com/mooxle/POTASpotFinder">POTASpotFinder</a> (MIT). Höhen aus Geländekacheln: Europe terrain data produced using Copernicus data and information funded by the European Union - EU-DEM layers; global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.</p>
+        <p>Basiskarten zum Umschalten: die Standardkarte von OpenStreetMap (ODbL, „Hell“) und <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA, „Topo“).</p>
+        <p>Fehlt ein Park oder liegt eine Fläche falsch? „Melden“ oben rechts, der Kartenausschnitt geht mit.</p>
+      </details>
+    </footer>
+  </aside>
+
+  <!-- ===================================================== Karte -->
+  <div class="pota-map" id="karte-rahmen" data-base="osm" style="--sat:.55">
+    <div id="karte" class="pota-leaflet"></div>
+
+    <!-- Search floats over the map on every screen size: it is the one
+         thing you need before the map is of any use. -->
+    <div class="pota-suche" id="suche-wrap">
+      <span class="pota-status" id="status" title="Ladezustand"></span>
+      <input id="suche" type="search" placeholder="Referenz, Name oder Locator" autocomplete="off" spellcheck="false" aria-label="Park suchen">
+      <ul id="treffer" role="listbox" hidden></ul>
+    </div>
+    <!-- Einstellungen. Neben der Suche, weil beides oben am Daumen liegt und
+         die Karte darunter ganz bleibt. Breit steht das Panel ohnehin
+         daneben, dort fehlt der Knopf. -->
+    <button type="button" class="pota-knopf pota-zahnrad nur-schmal" id="knopf-panel"
+            title="Einstellungen" aria-label="Einstellungen" aria-expanded="false" aria-controls="panel">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+
+    <!-- Alles, was die Karte bedient, in einer Spalte unten rechts. Oben
+         rechts würde jeder Knopf dem Kreuz der Sprechblasen in die Quere
+         kommen. -->
+    <div class="pota-knoepfe">
+      <button type="button" class="pota-knopf" id="knopf-plus" title="Näher heran" aria-label="Näher heran">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button type="button" class="pota-knopf" id="knopf-minus" title="Weiter weg" aria-label="Weiter weg">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      </button>
+      <button type="button" class="pota-knopf" id="knopf-standort" title="Wo stehe ich?" aria-label="Wo stehe ich?">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+      <button type="button" class="pota-knopf" id="knopf-vollbild" title="Vollbild" aria-label="Vollbild">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+
+    <div class="pota-position" id="position-box" hidden></div>
+    <div class="pota-readout" id="readout"><span id="locator">JO50HB</span><span id="koord">50,0700 N · 10,6700 E</span></div>
+  </div>
+
+</section>
+
+<!-- Everything that is text, below the map. On phones this is where you
+     scroll to when you want to read; the map above does not shrink for it. -->
+<section class="wrap pota-text">
+  <p class="count-line">Datenstand 06.09.2026 · 2585 Parks, davon 2424 mit Fläche · Spots alle 45 Sekunden</p>
+
+  <div class="article spalten">
+    <h2>Was die Karte zeigt</h2>
+    <p>POTA kennt zu jedem Park nur einen Punkt, keine Grenze. Die Flächen hier kommen von
+      pota-map.info, wo sie über Jahre von Hand gepflegt wurden. Ein Klick auf einen Park
+      zeigt Aktivierungen, Erstaktivierer, überlappende Referenzen und die besten Plätze
+      zum Aufbauen, dazu die Fläche als GeoJSON oder GPX zum Mitnehmen.</p>
+    <p>Wer im Überschneidungsbereich zweier Parks steht, aktiviert mit einem Aufbau mehrere
+      Referenzen. Der Schalter „Nur Parks, die sich überlappen“ lässt nur die stehen.
+      Unter „Unterwegs“ gibt es Parkplätze, Bänke, Schutzhütten und die Hochspannung, unter
+      die man sich nicht stellt, alles aus OpenStreetMap.</p>
+    <p>Parks haben oft keinen Empfang. „Diesen Ausschnitt offline sichern“ legt die eigene
+      Basiskarte „Dunkel“ samt Parkgrenzen bis drei Zoomstufen tiefer im Browser ab. Die
+      Karten „Hell“ und „Topo“ kommen von fremden Servern und dürfen nicht auf Vorrat
+      geladen werden, deshalb bleiben sie draußen.</p>
+  </div>
+
+  <p class="source-line">Flächen und Wegverläufe: <a href="https://pota-map.info">pota-map.info</a>
+    (DK5UR), MIT-Lizenz, mit freundlicher Genehmigung. Referenzen, Spots und Aktivierungen:
+    api.pota.app. Diese Seite gehört nicht zu POTA und wird nicht von POTA betrieben.
+    Gipfel: <a href="https://www.sota.org.uk">SOTA</a>. Punkte unterwegs und Basiskarte:
+    <a href="https://www.openstreetmap.org">OpenStreetMap</a>-Mitwirkende (ODbL), Basiskarte
+    über <a href="https://protomaps.com">Protomaps</a>. Topo:
+    <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA). Beste Plätze nach dem Modell von
+    <a href="https://github.com/mooxle/POTASpotFinder">POTASpotFinder</a> (MIT), Höhen aus
+    EU-DEM (Copernicus) und GMTED2010/SRTM (USGS). Alle Quellen mit Stand:
+    <a href="/quellen">Welche Quelle wofür</a>.</p>
+</section>
+</main>
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div>
+      <a class="brand" href="/">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16h10l2 3.6 2-3.6h10"/><path d="M9.5 10.5a9 9 0 0 1 13 0"/><path d="M9.5 21.5a9 9 0 0 0 13 0"/><path d="M6 6.5a14 14 0 0 1 20 0" opacity=".5"/><path d="M6 25.5a14 14 0 0 0 20 0" opacity=".5"/></svg>
+        <span>afu<span class="muted">.tools</span></span>
+      </a>
+      <p class="muted small">Werkzeuge und Nachschlagewerk für den Amateurfunk.</p>
+    </div>
+    <div>
+      <p class="muted small"><strong>Werkzeuge</strong></p>
+      <ul class="footlinks">
+        <li><a href="https://www.funkpate.de">Funkpate</a></li>
+        <li><a href="/pota">POTA-Karte</a></li>
+        <li><a href="/programmer/yaesu">Yaesu-Programmer</a></li>
+        <li><a href="https://antennasim.afu.tools">Antennensimulator</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="muted small"><strong>Wissen</strong></p>
+      <ul class="footlinks">
+        <li><a href="/termine">Prüfungstermine</a></li>
+        <li><a href="/bandplan">Bandplan</a></li>
+        <li><a href="/relais">Relaisliste</a></li>
+        <li><a href="/rechner">Rechner</a></li>
+        <li><a href="/lexikon">Lexikon</a></li>
+        <li><a href="/praefix">Präfix und DXCC</a></li>
+        <li><a href="/satelliten">Satelliten</a></li>
+        <li><a href="/notfunk">Notfunk</a></li>
+        <li><a href="/quellen">Quellen</a></li>
+        <li><a href="/api">API</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="muted small"><strong>Seite</strong></p>
+      <ul class="footlinks">
+        <li><a href="/einstieg">Weg zum Rufzeichen</a></li>
+        <li><a href="/melden">Fehler melden</a></li>
+        <li><a href="https://www.bravo37.de">DARC OV Haßberge, B37</a></li>
+        <li><a href="/impressum">Impressum</a></li>
+        <li><a href="/datenschutz">Datenschutz</a></li>
+      </ul>
+    </div>
+  </div>
+  <!-- Die Quellen stehen vollstaendig auf /quellen, mit Lizenz und Stand. Frueher
+       war die ganze Liste hier und damit auf jeder Seite; das war eine halbe
+       Bildschirmseite Fusszeile fuer eine Angabe, die einmal genuegt. Der Link
+       bleibt, weil GeoNames (CC BY 4.0) und OpenStreetMap (ODbL) die Nennung zur
+       Bedingung machen und von jeder Seite aus erreichbar sein muss. Karten
+       tragen ihre OSM-Nennung zusaetzlich direkt am Kartenrand. -->
+  <div class="wrap">
+    <p class="muted small">Datenquellen mit Lizenz und Stand:
+      <a href="/quellen">Welche Quelle wofür</a>.</p>
+  </div>
+</footer>
+<script>
+  // Aktiven Punkt in der Werkzeugleiste markieren.
+  document.querySelectorAll(".toolbar a, .toolnav a, .untermenu-inhalt a").forEach((a) => {
+    if (a.getAttribute("href") === location.pathname.replace(/\/$/, "")) {
+      a.setAttribute("aria-current", "page");
+    }
+  });
+</script>
+<script src="https://afu.tools/app.js?v=20260910g"></script>
+<script src="https://afu.tools/vendor/leaflet/leaflet.js"></script>
+<script src="daten.js"></script>
+<script src="pota.js"></script>
+</body>
+</html>

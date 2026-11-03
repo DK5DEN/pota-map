@@ -284,6 +284,23 @@ html, body {
 }
 .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+.sliderrow { display: flex; align-items: center; gap: 10px; }
+.sliderrow input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+/* The reading must not shift the slider while it is dragged: fixed width and
+   figures of equal width keep it still. */
+.sliderrow output {
+  flex: none;
+  width: 3.4em;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
 
 .check, .checks label {
@@ -507,6 +524,73 @@ html, body {
 }
 .pop .parkinfo a { color: var(--accent); }
 
+/* ---------- Beste Plätze im Park ---------- */
+
+.pop .places { margin: 8px 0 2px; }
+.pop .places .seghead { margin: 0 0 4px; }
+.place {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.place:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.place .jump {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.place .jump span { flex: 1; min-width: 0; line-height: 1.4; }
+.place .route {
+  flex: none;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.place .meta { color: var(--muted); }
+/* Same numbers as on the map: the marker is how you find the row again. */
+.place .rank {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #059669;
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 18px;
+  text-align: center;
+}
+.place .score {
+  flex: none;
+  min-width: 26px;
+  font-style: normal;
+  font-weight: 600;
+  text-align: right;
+  color: var(--accent);
+}
+.linkish {
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* ---------- Standortmeldung ---------- */
 
 #position-box {
@@ -576,7 +660,11 @@ html, body {
    popup never exceeds the viewport, and scrolls inside itself if it has to.
    Bringing it fully into view is the map's job, see keepPopupInView(). */
 .maplibregl-popup {
-  max-width: calc(100vw - 16px) !important;
+  /* The !important is against the library's own 240px. It used to carry only
+     the phone guard, which quietly overrode the 340px the popup is created
+     with (maplibre sets that on this element) - on a wide screen the popup
+     then grew as wide as the window and covered the map it points into. */
+  max-width: min(340px, calc(100vw - 16px)) !important;
 }
 .maplibregl-popup-content {
   padding: 11px 13px;
@@ -609,6 +697,9 @@ html, body {
   }
   #topbar h1 { display: none; }
   #status { display: none; }
+  /* #status carried the margin that pushes everything to the right edge;
+     without it the report button has to do that itself. */
+  #topbar #report-btn { margin-left: auto; }
 }
 
 
@@ -690,4 +781,14 @@ html, body {
 .report-images { display: flex; gap: 6px; flex-wrap: wrap; }
 .report-images img {
   max-width: 11rem; max-height: 8rem; border-radius: 6px; border: 1px solid var(--line);
+}
+
+/* Die Quellenangabe unten links ist ein Link mitten im Fliesstext. In
+   MapLibres Voreinstellung unterscheidet ihn nur die Farbe vom Text daneben,
+   und die traegt zu wenig Kontrast (2:1). Unterstreichen macht ihn auch ohne
+   Farbsehen als Link erkennbar. */
+.maplibregl-ctrl-attrib a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

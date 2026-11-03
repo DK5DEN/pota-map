@@ -21,6 +21,8 @@ are English.
 * your own activations by callsign, and your hunted parks from a CSV export
 * overlapping references ("n-fer"), so one setup can count for several parks
 * offline: save the visible area down three zoom levels
+* the standard OpenStreetMap rendering as the base you start on, and
+  OpenTopoMap with trails and contour lines next to it
 * GeoJSON and GPX download per park
 
 ## Services
@@ -39,6 +41,25 @@ The map itself is MapLibre GL on three PMTiles archives:
 * `data/pois.pmtiles` - what is out there: parking, benches, shelters,
   guideposts, activation targets, and the power lines you do not set up under
 
+Next to those there are two raster bases, and one of them is what the map
+starts with: "Hell" is the standard OpenStreetMap rendering (the same tiles
+pota-map.info uses), "Topo" is OpenTopoMap with contour lines. Both carry the
+path network the vector base does not have, which is what somebody walking
+into a park is looking for.
+
+Our own light vector base has no button at the moment (`HIDDEN_BASES` in
+`web/src/main.js`); it is still built, still served and still what the offline
+store holds. "Dunkel" is the one base you can take into the field.
+
+They come from other people's servers, which decides how they are handled: they
+are fetched for what is on the screen and never ahead of time, they are kept
+while they are fresh and handed out stale for as long as the server's own
+`stale-while-revalidate` allows, and they stay out of the offline store. Both
+prefetchers skip them on purpose. See the comments at `RASTER_BASES` in
+`web/src/main.js` and `RASTER_HOSTS` in `web/sw.js` before changing any of it -
+a host missing there is kept by nobody, and a prefetcher that picks them up
+breaks the terms we use them under.
+
 ## Where the data comes from
 
 | Data | Source | Terms |
@@ -47,12 +68,20 @@ The map itself is MapLibre GL on three PMTiles archives:
 | References, names, spots, activations | `api.pota.app` | undocumented, no published terms |
 | SOTA summits | `api-db2.sota.org.uk` | open to the amateur radio community |
 | Basemap | [Protomaps](https://protomaps.com) builds from OpenStreetMap | ODbL |
+| Raster base "Hell" | [openstreetmap.org tiles](https://operations.osmfoundation.org/policies/tiles/) | ODbL; their policy: interactive viewing only, no bulk downloading, no offline use |
+| Raster base "Topo" | [OpenTopoMap](https://opentopomap.org) | CC-BY-SA, app use welcome as long as their server is not hit with mass downloads |
 | POIs out there | country extracts from [geofabrik](https://download.geofabrik.de), falling back to [openstreetmap.fr](https://download.openstreetmap.fr/extracts) | ODbL |
+| Terrain for the places | [AWS terrain tiles](https://registry.opendata.aws/terrain-tiles/) (terrarium, zoom 12) | public domain and EU-DEM, attribution wording fixed by [their docs](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) |
+| Scoring of the places | [POTASpotFinder](https://github.com/mooxle/POTASpotFinder) (DA6MAX) | MIT - the model, not the code: same five factors, same weights |
 
 **Naming the sources is a condition of use, not politeness.** The credits live
-in three places and have to stay in sync: the footer in `web/index.html`,
-`customAttribution` in `web/src/main.js`, and `--attribution` in
-`pipeline/build_tiles.sh`.
+in five places and have to stay in sync: the footer in `web/index.html`
+(including `credits-places` for the terrain wording),
+`customAttribution` and the `attribution` of every entry in `RASTER_BASES` in
+`web/src/main.js`, `--attribution` in `pipeline/build_tiles.sh`, and the
+`attribution` array every `places/<REF>.json` carries with it. The wording for
+the raster bases and for the terrain tiles is theirs and is not to be
+shortened.
 
 ## Running it
 
@@ -94,7 +123,9 @@ docker compose run --rm cron bash /pipeline/run_pois.sh
 extract right away - only the filtered file per country stays in
 `cache/osm/`. Areas (a car park, a castle) are reduced to one point; power
 lines and electrified railways stay lines and go into a layer of their own.
-`build_poi_tiles.sh` turns both into `pois.pmtiles`.
+`build_poi_tiles.sh` turns both into `pois.pmtiles`. Roads that carry through
+traffic land in `roads.geojson`, which is never drawn and never turned into
+tiles - it only feeds the quiet score of the places.
 
 After a rebuild the tile service can still answer from the archive it had
 open - it caches the directories of the file it is serving. A restart drops
@@ -115,6 +146,58 @@ docker compose run --rm cron python /pipeline/fetch_osm_pois.py LU
 
 The categories are in `classify()` in `pipeline/fetch_osm_pois.py`; the tag
 filter has to be wider than the categories, because osmium can only say OR.
+
+### The places in a park
+
+Which bench, picnic table or shelter in a park is worth carrying a station to.
+Computed for every park - six minutes for all of them, so it runs with the
+weekly pass as well as after the monthly POI run - and written as one small
+file each, `data/web/places/<REF>.json`, plus `places_index.json` with count
+and best score. Nothing is asked at run time - no Overpass, no elevation
+service - and because the files sit under `/data/`, the service worker keeps
+them for the day out.
+
+The scoring follows [POTASpotFinder](https://github.com/mooxle/POTASpotFinder)
+by DA6MAX: prominence 30, quiet 25, horizon 20, comfort 15, access 10, down to
+his thresholds and the penalty for a tourist hotspot nearby. Two additions of
+our own sit next to that hundred instead of inside it, so the numbers stay
+comparable with his tool: distance to power lines and overhead wire, and
+distance to the park boundary. All of it in `pipeline/places_common.py`, one
+function per factor.
+
+One deliberate difference: he counts every `tourism=information` as a hotspot,
+which includes waymarkers - the most common object in our woods by far, and a
+signpost at a junction says nothing about how busy a bench is. Only attractions
+and information boards count here.
+
+Heights, prominence and horizon need a terrain model. It is fetched once, by
+hand, like the basemap - about 1 GB for the parks we cover, and terrain does
+not move:
+
+```bash
+docker compose run --rm cron python /pipeline/fetch_dem.py
+```
+
+Single parks are cheap, seconds each, because the extracts are already on
+disk. A park that appeared since the monthly run is picked up by the daily run
+through `--missing`:
+
+```bash
+docker compose run --rm cron python /pipeline/compute_places.py --ref DE-0123
+docker compose run --rm cron python /pipeline/compute_places.py --missing
+```
+
+Without the terrain tiles the run still works and scores what it can - the
+files then say `"dem": null` and the prominence and horizon factors are zero.
+
+Two things decide whether this takes minutes or hours, both learned the hard
+way. The join asks the points, not the parks: turned the other way round every
+point walks ten park outlines of up to half a million vertices, and a quarter
+of a million points took nine minutes. And the lines - roads, power lines - are
+projected once into web mercator and put into one tree, rather than scaled per
+park: with ten million park-line pairs that scaling was the bulk of the run. A
+mercator distance times the cosine of the latitude is metres again, well within
+a per mille over the few kilometres that matter here.
 
 ### Refreshing the basemap
 
